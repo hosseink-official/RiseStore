@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type
+from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type, get_product_prices, create_product_price, update_product_price, delete_product_price, create_supply_entry, get_supply_log
 from desktop.fonts import get_font, get_bold_font
 from desktop.utils import format_number, format_date
 
@@ -178,6 +178,10 @@ class ProductsView:
         tk.Button(header, text='+ محصول جدید', font=get_font(10),
                   bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
                   padx=16, pady=6, command=self._add).pack(side='left')
+        tk.Button(header, text='💲 قیمت‌ها', font=get_font(10),
+                  bg='#e2e8f0', fg='#475569', bd=0, cursor='hand2',
+                  padx=12, pady=6,
+                  command=self._manage_prices).pack(side='left', padx=(8, 0))
         tk.Button(header, text='🔄', font=get_font(10),
                   bg='#e2e8f0', fg='#475569', bd=0, cursor='hand2',
                   padx=12, pady=6,
@@ -296,3 +300,292 @@ class ProductsView:
         if messagebox.askyesno('تأیید', 'حذف شود؟'):
             delete_product(pid)
             self._load()
+
+    def _manage_prices(self):
+        products = get_all_products()
+        if not products:
+            messagebox.showinfo('', 'محصولی وجود ندارد')
+            return
+        win = tk.Toplevel(self.frame)
+        win.title('مدیریت قیمت‌های محصول')
+        win.geometry('650x550')
+        win.configure(bg='#f0f2f5')
+
+        main = tk.Frame(win, bg='#f0f2f5', padx=16, pady=12)
+        main.pack(fill='both', expand=True)
+
+        tk.Label(main, text='انتخاب محصول:', font=get_font(9),
+                 bg='#f0f2f5', fg='#475569').pack(anchor='e')
+        prod_var = tk.StringVar()
+        prod_items = [f'{p["id"]}: {p["name"]}' for p in products]
+        prod_cb = ttk.Combobox(main, textvariable=prod_var,
+                               values=prod_items, state='readonly',
+                               font=get_font(10), width=40)
+        prod_cb.pack(fill='x', pady=(4, 12))
+
+        list_frame = tk.Frame(main, bg='#ffffff',
+                              highlightbackground='#e2e8f0', highlightthickness=1)
+        list_frame.pack(fill='both', expand=True)
+
+        def load_prices(*_):
+            for w in list_frame.winfo_children():
+                w.destroy()
+            raw = prod_var.get()
+            if not raw or ': ' not in raw:
+                return
+            pid = int(raw.split(': ')[0])
+            prices = get_product_prices(pid)
+            if not prices:
+                tk.Label(list_frame, text='هیچ قیمت اضافی تعریف نشده',
+                         font=get_font(9), bg='#ffffff',
+                         fg='#94a3b8').pack(pady=20)
+            else:
+                cols = ('id', 'label', 'amount', 'stock', 'actions')
+                tree = ttk.Treeview(list_frame, columns=cols,
+                                    show='headings', height=10)
+                tree.heading('id', text='#')
+                tree.heading('label', text='عنوان')
+                tree.heading('amount', text='قیمت')
+                tree.heading('stock', text='موجودی')
+                tree.heading('actions', text='')
+                tree.column('id', width=40, anchor='center')
+                tree.column('label', width=160, anchor='e')
+                tree.column('amount', width=120, anchor='center')
+                tree.column('stock', width=70, anchor='center')
+                tree.column('actions', width=100, anchor='center')
+                tree.pack(fill='both', expand=True, padx=4, pady=4)
+                for pr in prices:
+                    tree.insert('', 'end', values=(
+                        pr['id'], pr['price_label'],
+                        format_number(pr['amount']), pr['stock'], '✏️  🗑️'))
+                tree.bind('<ButtonRelease-1>', lambda e: _on_price_click(e, tree, pid))
+
+            btn_frame = tk.Frame(list_frame, bg='#ffffff')
+            btn_frame.pack(fill='x', pady=(4, 2))
+            tk.Button(btn_frame, text='+ قیمت جدید', font=get_font(9),
+                      bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=14, pady=4,
+                      command=lambda: _add_price(pid)).pack(side='right', padx=(4, 0))
+            tk.Button(btn_frame, text='📦 تامین', font=get_font(9),
+                      bg='#059669', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=14, pady=4,
+                      command=lambda: _supply(pid, tree)).pack(side='right', padx=4)
+            tk.Button(btn_frame, text='📋 تاریخچه', font=get_font(9),
+                      bg='#d97706', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=14, pady=4,
+                      command=lambda: _show_history(pid, tree)).pack(side='right', padx=4)
+
+        def _add_price(pid):
+            fwin = tk.Toplevel(win)
+            fwin.title('قیمت جدید')
+            fwin.geometry('380x340')
+            fwin.configure(bg='#ffffff')
+            frm = tk.Frame(fwin, bg='#ffffff', padx=20, pady=16)
+            frm.pack(fill='both', expand=True)
+            tk.Label(frm, text='عنوان:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            label_var = tk.StringVar()
+            tk.Entry(frm, textvariable=label_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='قیمت خرید:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            buy_var = tk.StringVar(value='0')
+            tk.Entry(frm, textvariable=buy_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='قیمت فروش:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            sell_var = tk.StringVar()
+            tk.Entry(frm, textvariable=sell_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='تعداد:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            stock_var = tk.StringVar(value='0')
+            tk.Entry(frm, textvariable=stock_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='تاریخ:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            date_var = tk.StringVar()
+            try:
+                from jdatetime import date as jdate
+                date_var.set(str(jdate.today()))
+            except Exception:
+                from datetime import date as gdate
+                date_var.set(str(gdate.today()))
+            tk.Entry(frm, textvariable=date_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 10))
+            def save():
+                if not label_var.get().strip() or not sell_var.get().strip():
+                    return
+                qty = int(stock_var.get() or 0)
+                sell = int(sell_var.get())
+                buy = int(buy_var.get() or 0)
+                price_id = create_product_price(pid, label_var.get().strip(), sell, qty)
+                if qty > 0:
+                    try:
+                        from jdatetime import date as jdate
+                        from datetime import datetime
+                        jd = jdate.fromisoformat(str(date_var.get()))
+                        gd = jd.togregorian()
+                        supplied_at = datetime(gd.year, gd.month, gd.day).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        supplied_at = None
+                    if supplied_at:
+                        from desktop.db import execute as db_execute
+                        db_execute(
+                            "INSERT INTO store_supply_log (price_id, quantity, buy_price, sale_price, supplied_at) VALUES (?,?,?,?,?)",
+                            [price_id, qty, buy, sell, supplied_at]
+                        )
+                    else:
+                        create_supply_entry(price_id, qty, buy, sell)
+                fwin.destroy()
+                load_prices()
+            tk.Button(frm, text='ذخیره', font=get_font(10),
+                      bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=20, pady=4, command=save).pack()
+
+        def _edit_price(pid, price_id, old_label, old_amt, old_stock):
+            fwin = tk.Toplevel(win)
+            fwin.title('ویرایش قیمت')
+            fwin.geometry('350x240')
+            fwin.configure(bg='#ffffff')
+            frm = tk.Frame(fwin, bg='#ffffff', padx=20, pady=16)
+            frm.pack(fill='both', expand=True)
+            tk.Label(frm, text='عنوان:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            label_var = tk.StringVar(value=old_label)
+            tk.Entry(frm, textvariable=label_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(4, 8))
+            tk.Label(frm, text='قیمت:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            amt_var = tk.StringVar(value=str(old_amt))
+            tk.Entry(frm, textvariable=amt_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(4, 8))
+            tk.Label(frm, text='موجودی:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            stock_var = tk.StringVar(value=str(old_stock))
+            tk.Entry(frm, textvariable=stock_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(4, 12))
+            def save():
+                if not label_var.get().strip() or not amt_var.get().strip():
+                    return
+                update_product_price(price_id, label_var.get().strip(), int(amt_var.get()),
+                                     int(stock_var.get() or 0))
+                fwin.destroy()
+                load_prices()
+            tk.Button(frm, text='ذخیره', font=get_font(10),
+                      bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=20, pady=4, command=save).pack()
+
+        def _selected_price(tree):
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning('', 'ابتدا یک قیمت را انتخاب کنید')
+                return None
+            vals = tree.item(sel[0], 'values')
+            if not vals:
+                return None
+            return int(vals[0]), vals[1], int(vals[2]), int(vals[3])
+
+        def _supply(pid, tree):
+            sp = _selected_price(tree)
+            if not sp:
+                return
+            price_id, label, amt, stock = sp
+            fwin = tk.Toplevel(win)
+            fwin.title('تامین کالا')
+            fwin.geometry('350x270')
+            fwin.configure(bg='#ffffff')
+            frm = tk.Frame(fwin, bg='#ffffff', padx=20, pady=16)
+            frm.pack(fill='both', expand=True)
+            tk.Label(frm, text=f'تامین {label}', font=get_font(10),
+                     bg='#ffffff', fg='#1e293b').pack(anchor='e')
+            tk.Label(frm, text='تعداد:', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e', pady=(8, 0))
+            qty_var = tk.StringVar(value='1')
+            tk.Entry(frm, textvariable=qty_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='قیمت خرید (تومان):', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            buy_var = tk.StringVar(value='0')
+            tk.Entry(frm, textvariable=buy_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            tk.Label(frm, text='قیمت فروش (تومان):', font=get_font(9), bg='#ffffff',
+                     fg='#475569').pack(anchor='e')
+            sell_var = tk.StringVar(value=str(amt))
+            tk.Entry(frm, textvariable=sell_var, font=get_font(10),
+                     bd=1, relief='solid').pack(fill='x', pady=(2, 6))
+            def save():
+                qty = int(qty_var.get() or 0)
+                buy = int(buy_var.get() or 0)
+                sell = int(sell_var.get() or 0)
+                if qty < 1 or sell < 1:
+                    return
+                update_product_price(price_id, label, sell, stock + qty)
+                create_supply_entry(price_id, qty, buy, sell)
+                fwin.destroy()
+                load_prices()
+            tk.Button(frm, text='ذخیره', font=get_font(10),
+                      bg='#059669', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=20, pady=4, command=save).pack(pady=(6, 0))
+
+        def _show_history(pid, tree):
+            sp = _selected_price(tree)
+            if not sp:
+                return
+            price_id, label, amt, stock = sp
+            log = get_supply_log(price_id)
+            hwin = tk.Toplevel(win)
+            hwin.title(f'تاریخچه تامین - {label}')
+            hwin.geometry('700x400')
+            hwin.configure(bg='#f0f2f5')
+            main = tk.Frame(hwin, bg='#f0f2f5', padx=16, pady=12)
+            main.pack(fill='both', expand=True)
+            if not log:
+                tk.Label(main, text='هیچ تامینی ثبت نشده',
+                         font=get_font(10), bg='#f0f2f5',
+                         fg='#94a3b8').pack(pady=30)
+                return
+            cols = ('id', 'date', 'qty', 'buy', 'sell')
+            tree2 = ttk.Treeview(main, columns=cols, show='headings', height=16)
+            tree2.heading('id', text='#')
+            tree2.heading('date', text='تاریخ')
+            tree2.heading('qty', text='تعداد')
+            tree2.heading('buy', text='قیمت خرید')
+            tree2.heading('sell', text='قیمت فروش')
+            tree2.column('id', width=40, anchor='center')
+            tree2.column('date', width=160, anchor='center')
+            tree2.column('qty', width=80, anchor='center')
+            tree2.column('buy', width=150, anchor='center')
+            tree2.column('sell', width=150, anchor='center')
+            for row in log:
+                try:
+                    from jdatetime import datetime as jdt
+                    from datetime import datetime
+                    d = jdt.fromgregorian(datetime=datetime.strptime(row['supplied_at'], '%Y-%m-%d %H:%M:%S'))
+                    ds = d.strftime('%Y/%m/%d %H:%M')
+                except Exception:
+                    ds = row['supplied_at']
+                tree2.insert('', 'end', values=(
+                    row['id'], ds, row['quantity'],
+                    format_number(row['buy_price']),
+                    format_number(row['sale_price'])))
+            tree2.pack(fill='both', expand=True, padx=4, pady=4)
+
+        def _on_price_click(event, tree, pid):
+            col = tree.identify_column(event.x)
+            item = tree.identify_row(event.y)
+            if not item or col != '#5':
+                return
+            vals = tree.item(item, 'values')
+            if not vals:
+                return
+            price_id = int(vals[0])
+            x_rel = event.x - tree.bbox(item, '#5')[0]
+            if x_rel < 50:
+                _edit_price(pid, price_id, vals[1], int(vals[2]), int(vals[3]))
+            else:
+                if messagebox.askyesno('تأیید', 'حذف شود؟'):
+                    delete_product_price(price_id)
+                    load_prices()
+
+        prod_var.trace('w', load_prices)

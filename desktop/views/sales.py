@@ -5,7 +5,8 @@ from desktop.db import (
     get_sale_items, get_sale_payments, sale_remaining,
     sale_total_paid, update_sale_status,
     create_sale, create_sale_item, create_payment, create_installment,
-    get_customer, get_all_customers, fetchall, fetchone
+    get_customer, get_all_customers, fetchall, fetchone,
+    get_product_prices
 )
 from desktop.fonts import get_font, get_bold_font
 from desktop.utils import format_number, format_date, format_datetime
@@ -240,17 +241,57 @@ class SaleForm:
                                          parent=self.frame.winfo_toplevel())
         if qty is None:
             return
+        prices = get_product_prices(pid)
+        price_id = None
+        unit_price = p['selling_price']
+        avail = [(None, p['selling_price'],
+                  f'پیش‌فرض: {format_number(p["selling_price"])} تومان')]
+        for pr in prices:
+            if pr['stock'] > 0:
+                avail.append((pr['id'], pr['amount'],
+                              f'{pr["price_label"]}: {format_number(pr["amount"])} تومان (موجودی: {pr["stock"]})'))
+        if len(avail) > 1:
+            price_win = tk.Toplevel(self.frame.winfo_toplevel())
+            price_win.title('انتخاب قیمت')
+            price_win.geometry('450x350')
+            price_win.configure(bg='#ffffff')
+            frm = tk.Frame(price_win, bg='#ffffff', padx=20, pady=16)
+            frm.pack(fill='both', expand=True)
+            tk.Label(frm, text=f'{p["name"]} - انتخاب قیمت:', font=get_font(10),
+                     bg='#ffffff', fg='#1e293b').pack(anchor='e')
+            var = tk.StringVar(value=str(avail[0][0]))
+            for pid_, amt, label in avail:
+                rb = tk.Radiobutton(frm, text=label, variable=var,
+                                    value=str(pid_),
+                                    font=get_font(9), bg='#ffffff', fg='#475569',
+                                    anchor='e', padx=10, pady=4)
+                rb.pack(fill='x', pady=2)
+            def confirm():
+                nonlocal price_id, unit_price
+                selected = var.get()
+                for pid_, amt, _ in avail:
+                    if str(pid_) == selected:
+                        price_id = pid_
+                        unit_price = amt
+                        break
+                price_win.destroy()
+            tk.Button(frm, text='تأیید', font=get_font(10),
+                      bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
+                      padx=20, pady=4, command=confirm).pack(pady=(12, 0))
+            self.frame.wait_window(price_win)
         for item in self.cart:
             if item['product']['id'] == pid:
                 item['quantity'] += qty
+                item['unit_price'] = unit_price
                 item['subtotal'] = item['quantity'] * item['unit_price']
                 self._render_cart()
                 return
         self.cart.append({
             'product': p,
             'quantity': qty,
-            'unit_price': p['selling_price'],
-            'subtotal': qty * p['selling_price'],
+            'unit_price': unit_price,
+            'subtotal': qty * unit_price,
+            'price_id': price_id,
         })
         self._render_cart()
 
@@ -395,7 +436,8 @@ class SaleForm:
 
         for item in self.cart:
             p = item['product']
-            create_sale_item(sale_id, p['id'], item['quantity'], item['unit_price'], item['subtotal'])
+            create_sale_item(sale_id, p['id'], item['quantity'], item['unit_price'], item['subtotal'],
+                             price_id=item.get('price_id'))
 
         if self.payment_type == 'cash':
             create_payment(sale_id, customer_id, total, 'cash', '')

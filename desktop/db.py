@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS store_product (
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 );
+CREATE TABLE IF NOT EXISTS store_product_price (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id BIGINT NOT NULL REFERENCES store_product(id),
+    price_label VARCHAR(100) NOT NULL,
+    amount DECIMAL NOT NULL DEFAULT 0,
+    stock INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS store_supply_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    price_id BIGINT NOT NULL REFERENCES store_product_price(id),
+    quantity INTEGER NOT NULL DEFAULT 0,
+    buy_price DECIMAL NOT NULL DEFAULT 0,
+    sale_price DECIMAL NOT NULL DEFAULT 0,
+    supplied_at DATETIME NOT NULL
+);
 CREATE TABLE IF NOT EXISTS store_sale (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id BIGINT NOT NULL REFERENCES store_customer(id),
@@ -123,6 +138,12 @@ def _ensure_database():
 
         try:
             conn.execute("ALTER TABLE store_sale ADD COLUMN payment_due_days INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE store_product_price ADD COLUMN stock INTEGER NOT NULL DEFAULT 0")
             conn.commit()
         except sqlite3.OperationalError:
             pass
@@ -260,7 +281,36 @@ def update_product(tid, data):
     )
 
 def delete_product(tid):
+    execute("DELETE FROM store_product_price WHERE product_id=?", [tid])
     execute("DELETE FROM store_product WHERE id=?", [tid])
+
+def get_product_prices(pid):
+    return fetchall("SELECT * FROM store_product_price WHERE product_id=? ORDER BY id", [pid])
+
+def create_product_price(pid, label, amount, stock=0):
+    return execute(
+        "INSERT INTO store_product_price (product_id, price_label, amount, stock) VALUES (?,?,?,?)",
+        [pid, label, int(amount), int(stock)]
+    )
+
+def update_product_price(price_id, label, amount, stock=0):
+    execute(
+        "UPDATE store_product_price SET price_label=?, amount=?, stock=? WHERE id=?",
+        [label, int(amount), int(stock), price_id]
+    )
+
+def delete_product_price(price_id):
+    execute("DELETE FROM store_supply_log WHERE price_id=?", [price_id])
+    execute("DELETE FROM store_product_price WHERE id=?", [price_id])
+
+def create_supply_entry(price_id, quantity, buy_price, sale_price):
+    return execute(
+        "INSERT INTO store_supply_log (price_id, quantity, buy_price, sale_price, supplied_at) VALUES (?,?,?,?,datetime('now'))",
+        [price_id, int(quantity), int(buy_price), int(sale_price)]
+    )
+
+def get_supply_log(price_id):
+    return fetchall("SELECT * FROM store_supply_log WHERE price_id=? ORDER BY supplied_at DESC", [price_id])
 
 def get_product_types():
     return fetchall("SELECT * FROM store_producttype ORDER BY name")
@@ -338,11 +388,17 @@ def get_overdue_sales():
         "ORDER BY s.sale_date"
     )
 
-def create_sale_item(sale_id, product_id, quantity, unit_price, subtotal):
-    execute(
-        "UPDATE store_product SET stock=stock-? WHERE id=? AND stock>=?",
-        [quantity, product_id, quantity]
-    )
+def create_sale_item(sale_id, product_id, quantity, unit_price, subtotal, price_id=None):
+    if price_id:
+        execute(
+            "UPDATE store_product_price SET stock=stock-? WHERE id=? AND stock>=?",
+            [quantity, price_id, quantity]
+        )
+    else:
+        execute(
+            "UPDATE store_product SET stock=stock-? WHERE id=? AND stock>=?",
+            [quantity, product_id, quantity]
+        )
     return execute(
         "INSERT INTO store_saleitem (sale_id, product_id, quantity, unit_price, subtotal) VALUES (?,?,?,?,?)",
         [sale_id, product_id, quantity, unit_price, subtotal]
