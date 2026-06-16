@@ -193,8 +193,9 @@ class SaleForm:
         prod_frame.pack(fill='both', expand=True, padx=4, pady=4)
 
         for p in get_all_products()[:30]:
+            u = p.get('unit') or ''
             btn = tk.Button(prod_frame,
-                            text=f"{p['name']} — {format_number(p['selling_price'])}",
+                            text=f"{p['name']} ({u}) — {format_number(p['selling_price'])}",
                             font=get_font(9), bg='#ffffff', fg='#334155',
                             bd=0, anchor='w', padx=8, pady=4,
                             cursor='hand2',
@@ -234,7 +235,7 @@ class SaleForm:
         p = get_product(pid)
         if not p:
             return
-        qty = tk.simpledialog.askinteger('تعداد', f'تعداد {p["name"]}:',
+        qty = tk.simpledialog.askinteger('مقدار', f'{p["unit"]} {p["name"]}:',
                                          minvalue=1, maxvalue=9999,
                                          parent=self.frame.winfo_toplevel())
         if qty is None:
@@ -267,7 +268,8 @@ class SaleForm:
             row.pack(fill='x', pady=2)
             tk.Label(row, text=item['product']['name'], font=get_font(9),
                      bg='#f9fafb', fg='#334155').pack(side='right', padx=4)
-            tk.Label(row, text=f"{item['quantity']} × {format_number(item['unit_price'])}",
+            unit = item['product'].get('unit') or ''
+            tk.Label(row, text=f"{item['quantity']} {unit} × {format_number(item['unit_price'])}",
                      font=get_font(9), bg='#f9fafb',
                      fg='#64748b').pack(side='right', padx=4)
             tk.Label(row, text=format_number(item['subtotal']),
@@ -325,6 +327,17 @@ class SaleForm:
         tk.Entry(dp_frame, textvariable=self.dp_var, font=get_font(10),
                  bd=1, relief='solid', width=20).pack(side='right', padx=(8, 0))
 
+        self.due_days_var = tk.StringVar(value='0')
+        due_frame = tk.Frame(form, bg='#ffffff')
+        due_frame.pack(fill='x', pady=(0, 12))
+        tk.Label(due_frame, text='مهلت پرداخت (روز):', font=get_font(9),
+                 bg='#ffffff', fg='#475569').pack(side='right')
+        tk.Spinbox(due_frame, from_=0, to=365, textvariable=self.due_days_var,
+                   font=get_font(10), bd=1, relief='solid', width=10).pack(
+                       side='right', padx=(8, 0))
+        tk.Label(due_frame, text='(صفر = نقدی)', font=get_font(8),
+                 bg='#ffffff', fg='#94a3b8').pack(side='right')
+
         notes_frame = tk.Frame(form, bg='#ffffff')
         notes_frame.pack(fill='x', pady=(0, 12))
         tk.Label(notes_frame, text='یادداشت:', font=get_font(9),
@@ -359,10 +372,26 @@ class SaleForm:
         dp = int(self.dp_var.get() or 0)
         notes = self.notes_text.get('1.0', 'end-1c').strip()
 
-        customer_id = self.selected_customer['id']
-        status = 'pending' if self.payment_type == 'installment' else 'paid'
+        for item in self.cart:
+            p = item['product']
+            pdata = get_product(p['id'])
+            if not pdata or (pdata['stock'] or 0) < item['quantity']:
+                messagebox.showwarning(
+                    'موجودی ناکافی',
+                    f"موجودی {p['name']} کافی نیست\n"
+                    f"موجودی فعلی: {pdata['stock'] if pdata else 0}"
+                )
+                return
 
-        sale_id = create_sale(customer_id, total, self.payment_type, status, notes)
+        customer_id = self.selected_customer['id']
+        due_days = int(self.due_days_var.get() or 0)
+        if self.payment_type == 'installment' or due_days > 0:
+            status = 'pending'
+        else:
+            status = 'paid'
+
+        sale_id = create_sale(customer_id, total, self.payment_type, status, notes,
+                              payment_due_days=due_days)
 
         for item in self.cart:
             p = item['product']

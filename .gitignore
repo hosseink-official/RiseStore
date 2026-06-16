@@ -219,3 +219,6 @@ __marimo__/
 
 # Desktop venv
 desktop/venv/
+
+# PyInstaller build artifacts
+build_tmp/

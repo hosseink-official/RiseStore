@@ -183,22 +183,24 @@ class ProductsView:
                   padx=12, pady=6,
                   command=self._load).pack(side='left', padx=(8, 0))
 
-        columns = ('id', 'name', 'type', 'price', 'cost', 'stock', 'actions')
+        columns = ('id', 'name', 'type', 'unit', 'price', 'cost', 'stock', 'actions')
         self.tree = ttk.Treeview(self.frame, columns=columns,
                                  show='headings', height=20)
         self.tree.heading('id', text='#', anchor='center')
         self.tree.heading('name', text='نام محصول', anchor='e')
         self.tree.heading('type', text='نوع', anchor='e')
+        self.tree.heading('unit', text='واحد', anchor='center')
         self.tree.heading('price', text='قیمت فروش', anchor='center')
         self.tree.heading('cost', text='قیمت خرید', anchor='center')
         self.tree.heading('stock', text='موجودی', anchor='center')
         self.tree.heading('actions', text='', anchor='center')
         self.tree.column('id', width=50, anchor='center')
-        self.tree.column('name', width=200, anchor='e')
-        self.tree.column('type', width=120, anchor='e')
-        self.tree.column('price', width=120, anchor='center')
-        self.tree.column('cost', width=120, anchor='center')
-        self.tree.column('stock', width=80, anchor='center')
+        self.tree.column('name', width=180, anchor='e')
+        self.tree.column('type', width=110, anchor='e')
+        self.tree.column('unit', width=70, anchor='center')
+        self.tree.column('price', width=110, anchor='center')
+        self.tree.column('cost', width=110, anchor='center')
+        self.tree.column('stock', width=70, anchor='center')
         self.tree.column('actions', width=80, anchor='center')
         self.tree.pack(fill='both', expand=True)
 
@@ -213,6 +215,7 @@ class ProductsView:
             self.tree.insert('', 'end', values=(
                 p['id'], p['name'],
                 p.get('product_type_name') or '—',
+                p.get('unit') or '',
                 format_number(p['selling_price']),
                 format_number(p['purchase_price']),
                 p['stock'],
@@ -224,13 +227,13 @@ class ProductsView:
             return
         col = self.tree.identify_column(event.x)
         item = self.tree.identify_row(event.y)
-        if not item or col != '#7':
+        if not item or col != '#8':
             return
         values = self.tree.item(item, 'values')
         if not values:
             return
         pid = int(values[0])
-        x_rel = event.x - self.tree.bbox(item, '#7')[0]
+        x_rel = event.x - self.tree.bbox(item, '#8')[0]
         if x_rel < 40:
             self._edit(pid)
         else:
@@ -239,15 +242,18 @@ class ProductsView:
     def _add(self):
         types = get_product_types()
         type_items = [f'{t["id"]}: {t["name"]}' for t in types]
+        unit_items = ['', 'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
         fields = [('نام محصول', 'name', 'text'),
                   ('نوع محصول', 'product_type_id', 'combobox'),
+                  ('واحد', 'unit', 'combobox'),
                   ('قیمت فروش', 'selling_price', 'number'),
                   ('قیمت خرید', 'purchase_price', 'number'),
                   ('موجودی', 'stock', 'number'),
                   ('توضیحات', 'description', 'textarea')]
         _make_form_dialog(self.frame, 'محصول جدید', fields,
                           on_save=self._save_new,
-                          combobox_data={'product_type_id': type_items})
+                          combobox_data={'product_type_id': type_items,
+                                         'unit': unit_items})
 
     def _save_new(self, data):
         raw = data.get('product_type_id', '')
@@ -264,15 +270,18 @@ class ProductsView:
             return
         types = get_product_types()
         type_items = [f'{t["id"]}: {t["name"]}' for t in types]
+        unit_items = ['', 'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
         fields = [('نام محصول', 'name', 'text'),
                   ('نوع محصول', 'product_type_id', 'combobox'),
+                  ('واحد', 'unit', 'combobox'),
                   ('قیمت فروش', 'selling_price', 'number'),
                   ('قیمت خرید', 'purchase_price', 'number'),
                   ('موجودی', 'stock', 'number'),
                   ('توضیحات', 'description', 'textarea')]
         _make_form_dialog(self.frame, 'ویرایش محصول', fields, obj=p,
                           on_save=lambda d: self._save_edit(pid, d),
-                          combobox_data={'product_type_id': type_items})
+                          combobox_data={'product_type_id': type_items,
+                                         'unit': unit_items})
 
     def _save_edit(self, pid, data):
         raw = data.get('product_type_id', '')

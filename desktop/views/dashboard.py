@@ -1,8 +1,8 @@
 import tkinter as tk
-from desktop.db import fetchall, fetchone, daily_sales, monthly_sales, best_selling, get_debtors, today_str, month_start
+from desktop.db import fetchall, fetchone, daily_sales, monthly_sales, best_selling, get_debtors, today_str, month_start, get_overdue_sales
 from desktop.fonts import get_font, get_bold_font
 from desktop.utils import format_number, format_date
-from datetime import date
+from datetime import date, datetime
 
 
 class DashboardView:
@@ -44,6 +44,9 @@ class DashboardView:
 
         best = best_selling(5)
 
+        overdue = get_overdue_sales()
+        overdue_count = len(overdue)
+
         cards_frame = tk.Frame(self.frame, bg='#f0f2f5')
         cards_frame.pack(fill='x', pady=(0, 24))
 
@@ -56,6 +59,9 @@ class DashboardView:
              '', '#fefce8', '#eab308'),
             ('بدهکاران', f'{debtors_count} نفر', '',
              '#fef2f2', '#ef4444'),
+            ('پرداخت‌های گذشته', f'{overdue_count} فاکتور', '',
+             '#fef2f2' if overdue_count else '#f0fdf4',
+             '#dc2626' if overdue_count else '#22c55e'),
         ]
 
         for i, (title, value, sub, bg_color, accent) in enumerate(stats):
@@ -69,6 +75,39 @@ class DashboardView:
             if sub:
                 tk.Label(card, text=sub, font=get_font(8),
                          bg='#ffffff', fg='#94a3b8').pack(anchor='e')
+
+        overdue_frame = tk.Frame(self.frame, bg='#ffffff',
+                                 highlightbackground='#e2e8f0',
+                                 highlightthickness=1, padx=16, pady=12)
+        overdue_frame.pack(fill='x', pady=(0, 12))
+
+        tk.Label(overdue_frame, text='⏰  پرداخت‌های گذشته',
+                 font=get_bold_font(12), bg='#ffffff',
+                 fg='#dc2626' if overdue_count else '#22c55e').pack(
+                     anchor='e', pady=(0, 10))
+
+        if overdue:
+            for s in overdue[:10]:
+                due_date = date.fromisoformat(s['sale_date'][:10])
+                import jdatetime
+                from datetime import timedelta
+                due_j = jdatetime.date.fromgregorian(
+                    date=due_date + timedelta(days=s['payment_due_days']))
+                row = tk.Frame(overdue_frame, bg='#ffffff')
+                row.pack(fill='x', pady=2)
+                name = f"{s['first_name']} {s['last_name']}"
+                tk.Label(row, text=f"{name} — فاکتور #{s['id']}",
+                         font=get_font(9), bg='#ffffff',
+                         fg='#334155').pack(side='right')
+                tk.Label(row,
+                         text=f"سررسید: {due_j.strftime('%Y/%m/%d')} | "
+                              f"{format_number(s['total_amount'])}",
+                         font=get_font(9), bg='#ffffff',
+                         fg='#dc2626').pack(side='left')
+        else:
+            tk.Label(overdue_frame, text='همه پرداخت‌ها به‌موقع انجام شده',
+                     font=get_font(9), bg='#ffffff',
+                     fg='#94a3b8').pack(pady=10)
 
         lower = tk.Frame(self.frame, bg='#f0f2f5')
         lower.pack(fill='both', expand=True)

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS store_product (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     product_type_id BIGINT REFERENCES store_producttype(id),
     name VARCHAR(200) NOT NULL,
+    unit VARCHAR(20) NOT NULL DEFAULT '',
     purchase_price DECIMAL NOT NULL DEFAULT 0,
     selling_price DECIMAL NOT NULL DEFAULT 0,
     stock INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS store_sale (
     total_amount DECIMAL NOT NULL,
     payment_type VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    payment_due_days INTEGER NOT NULL DEFAULT 0,
     notes TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL
 );
@@ -112,6 +114,18 @@ def _ensure_database():
         conn.execute("PRAGMA foreign_keys=OFF")
         conn.executescript(SCHEMA_SQL)
         conn.commit()
+
+        try:
+            conn.execute("ALTER TABLE store_product ADD COLUMN unit VARCHAR(20) NOT NULL DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            conn.execute("ALTER TABLE store_sale ADD COLUMN payment_due_days INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
         cur = conn.execute("SELECT COUNT(*) as c FROM auth_user")
         count = cur.fetchone()[0]
@@ -235,14 +249,14 @@ def get_all_products():
 
 def create_product(data):
     return execute(
-        "INSERT INTO store_product (name, product_type_id, purchase_price, selling_price, stock, description, created_at, updated_at) VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))",
-        [data['name'], data.get('product_type_id'), int(data.get('purchase_price',0) or 0), int(data.get('selling_price',0) or 0), int(data.get('stock',0) or 0), data.get('description','')]
+        "INSERT INTO store_product (name, product_type_id, unit, purchase_price, selling_price, stock, description, created_at, updated_at) VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))",
+        [data['name'], data.get('product_type_id'), data.get('unit',''), int(data.get('purchase_price',0) or 0), int(data.get('selling_price',0) or 0), int(data.get('stock',0) or 0), data.get('description','')]
     )
 
 def update_product(tid, data):
     execute(
-        "UPDATE store_product SET name=?, product_type_id=?, purchase_price=?, selling_price=?, stock=?, description=?, updated_at=datetime('now') WHERE id=?",
-        [data['name'], data.get('product_type_id'), int(data.get('purchase_price',0) or 0), int(data.get('selling_price',0) or 0), int(data.get('stock',0) or 0), data.get('description',''), tid]
+        "UPDATE store_product SET name=?, product_type_id=?, unit=?, purchase_price=?, selling_price=?, stock=?, description=?, updated_at=datetime('now') WHERE id=?",
+        [data['name'], data.get('product_type_id'), data.get('unit',''), int(data.get('purchase_price',0) or 0), int(data.get('selling_price',0) or 0), int(data.get('stock',0) or 0), data.get('description',''), tid]
     )
 
 def delete_product(tid):
@@ -309,13 +323,26 @@ def sale_remaining(sid):
         return 0
     return (sale['total_amount'] or 0) - sale_total_paid(sid)
 
-def create_sale(customer_id, total_amount, payment_type, status, notes, created_by_id=1):
+def create_sale(customer_id, total_amount, payment_type, status, notes, payment_due_days=0, created_by_id=1):
     return execute(
-        "INSERT INTO store_sale (customer_id, created_by_id, total_amount, payment_type, status, notes, sale_date, created_at) VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))",
-        [customer_id, created_by_id, total_amount, payment_type, status, notes]
+        "INSERT INTO store_sale (customer_id, created_by_id, total_amount, payment_type, status, payment_due_days, notes, sale_date, created_at) VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))",
+        [customer_id, created_by_id, total_amount, payment_type, status, payment_due_days, notes]
+    )
+
+def get_overdue_sales():
+    return fetchall(
+        "SELECT s.*, c.first_name, c.last_name, c.phone "
+        "FROM store_sale s JOIN store_customer c ON c.id=s.customer_id "
+        "WHERE s.status IN ('pending','partial') AND s.payment_due_days > 0 "
+        "AND date(s.sale_date, '+' || s.payment_due_days || ' days') < date('now') "
+        "ORDER BY s.sale_date"
     )
 
 def create_sale_item(sale_id, product_id, quantity, unit_price, subtotal):
+    execute(
+        "UPDATE store_product SET stock=stock-? WHERE id=? AND stock>=?",
+        [quantity, product_id, quantity]
+    )
     return execute(
         "INSERT INTO store_saleitem (sale_id, product_id, quantity, unit_price, subtotal) VALUES (?,?,?,?,?)",
         [sale_id, product_id, quantity, unit_price, subtotal]

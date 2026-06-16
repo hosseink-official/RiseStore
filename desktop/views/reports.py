@@ -184,16 +184,18 @@ class ReportsView:
                          highlightthickness=1, padx=0, pady=0)
         frame.pack(fill='both', expand=True)
 
-        cols = ('name', 'phone', 'total', 'paid', 'debt')
+        cols = ('name', 'phone', 'invoices', 'total', 'paid', 'debt')
         tree = ttk.Treeview(frame, columns=cols, show='headings', height=20)
         tree.heading('name', text='مشتری', anchor='e')
         tree.heading('phone', text='شماره تماس', anchor='center')
+        tree.heading('invoices', text='فاکتورهای باز', anchor='center')
         tree.heading('total', text='کل خرید', anchor='center')
         tree.heading('paid', text='کل پرداخت', anchor='center')
         tree.heading('debt', text='بدهی', anchor='center')
         for col in cols:
-            tree.column(col, width=140, anchor='center')
+            tree.column(col, width=120, anchor='center')
         tree.column('name', width=200, anchor='e')
+        tree.column('invoices', width=100, anchor='center')
         tree.pack(fill='both', expand=True)
 
         debtors = get_debtors()
@@ -201,11 +203,68 @@ class ReportsView:
             debt = (d['total'] or 0) - (d['paid'] or 0)
             if debt <= 0:
                 continue
+            cid = d['id']
+            open_sales = fetchall(
+                "SELECT id, total_amount FROM store_sale WHERE customer_id=? AND status IN ('pending','partial')",
+                [cid]
+            )
+            open_count = len(open_sales)
             tree.insert('', 'end', values=(
                 f"{d['first_name']} {d['last_name']}",
                 d.get('phone') or '—',
+                open_count,
                 format_number(d['total']), format_number(d['paid']),
                 format_number(debt),
+            ))
+
+        tree.bind('<Double-1>', lambda e: self._show_debtor_invoices(tree, e))
+
+    def _show_debtor_invoices(self, tree, event):
+        item = tree.identify_row(event.y)
+        if not item:
+            return
+        values = tree.item(item, 'values')
+        if not values:
+            return
+        name = values[0]
+        cid = None
+        for d in get_debtors():
+            fn = f"{d['first_name']} {d['last_name']}"
+            if fn == name:
+                cid = d['id']
+                break
+        if not cid:
+            return
+        sales = fetchall(
+            "SELECT id, sale_date, total_amount, status FROM store_sale WHERE customer_id=? AND status IN ('pending','partial') ORDER BY sale_date DESC",
+            [cid]
+        )
+        if not sales:
+            return
+        win = tk.Toplevel(tree.winfo_toplevel())
+        win.title(f'فاکتورهای باز - {name}')
+        win.geometry('600x400')
+        win.configure(bg='#f0f2f5')
+        from desktop.db import sale_remaining
+        from desktop.utils import format_datetime
+        cols = ('id', 'date', 'amount', 'remaining', 'status')
+        t = ttk.Treeview(win, columns=cols, show='headings', height=15)
+        t.heading('id', text='#')
+        t.heading('date', text='تاریخ')
+        t.heading('amount', text='مبلغ')
+        t.heading('remaining', text='باقی‌مانده')
+        t.heading('status', text='وضعیت')
+        for col in cols:
+            t.column(col, width=100, anchor='center')
+        t.pack(fill='both', expand=True, padx=16, pady=16)
+        for s in sales:
+            rem = sale_remaining(s['id'])
+            t.insert('', 'end', values=(
+                s['id'],
+                format_datetime(s['sale_date']),
+                format_number(s['total_amount']),
+                format_number(rem),
+                s['status'],
             ))
 
     def _best_selling_report(self):
