@@ -5,7 +5,7 @@ from desktop.db import (
     get_sale_items, get_sale_payments, sale_remaining,
     sale_total_paid, update_sale_status,
     create_sale, create_sale_item, create_payment, create_installment,
-    get_customer, get_all_customers, fetchall, fetchone,
+    get_customer, get_all_customers, create_customer, fetchall, fetchone,
     get_product_prices
 )
 from desktop.fonts import get_font, get_bold_font
@@ -155,6 +155,48 @@ class SaleForm:
                                 cursor='hand2',
                                 command=lambda cid=c['id']: self._select_customer(cid))
                 btn.pack(fill='x')
+
+            if not customers:
+                add_frame = tk.Frame(customers_list, bg='#ffffff')
+                add_frame.pack(fill='x', padx=8, pady=8)
+
+                tk.Label(add_frame, text='مشتری یافت نشد. مشتری جدید اضافه کنید:',
+                         font=get_font(9), bg='#ffffff', fg='#ef4444').pack(anchor='e', pady=(0, 6))
+
+                tk.Label(add_frame, text='نام:', font=get_font(9), bg='#ffffff',
+                         fg='#334155').pack(anchor='e')
+                first_name_entry = tk.Entry(add_frame, font=get_font(9), bd=1, relief='solid')
+                first_name_entry.pack(fill='x', ipady=3, pady=(0, 4))
+
+                tk.Label(add_frame, text='نام خانوادگی:', font=get_font(9), bg='#ffffff',
+                         fg='#334155').pack(anchor='e')
+                last_name_entry = tk.Entry(add_frame, font=get_font(9), bd=1, relief='solid')
+                last_name_entry.pack(fill='x', ipady=3, pady=(0, 4))
+
+                tk.Label(add_frame, text='تلفن:', font=get_font(9), bg='#ffffff',
+                         fg='#334155').pack(anchor='e')
+                phone_entry = tk.Entry(add_frame, font=get_font(9), bd=1, relief='solid')
+                phone_entry.pack(fill='x', ipady=3, pady=(0, 4))
+
+                def add_customer():
+                    first_name = first_name_entry.get().strip()
+                    last_name = last_name_entry.get().strip()
+                    phone = phone_entry.get().strip()
+                    if not first_name:
+                        messagebox.showwarning('', 'نام الزامی است')
+                        return
+                    data = {'first_name': first_name, 'last_name': last_name, 'phone': phone}
+                    create_customer(data)
+                    customers = get_all_customers(phone or first_name)
+                    if customers:
+                        self._select_customer(customers[0]['id'])
+                        search_var.set('')
+                        search()
+
+                tk.Button(add_frame, text='افزودن مشتری', font=get_font(9),
+                          bg='#10b981', fg='#ffffff', bd=0, cursor='hand2',
+                          padx=16, pady=4,
+                          command=add_customer).pack(pady=(4, 0))
 
         search_var.trace('w', lambda *a: search())
         search()

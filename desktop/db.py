@@ -478,3 +478,75 @@ def best_selling(limit=10):
         GROUP BY si.product_id
         ORDER BY qty DESC LIMIT {limit}
     """)
+
+def yearly_sales(year):
+    return fetchall("""
+        SELECT strftime('%m', sale_date) as month,
+               COUNT(*) as sale_count,
+               SUM(total_amount) as total,
+               SUM(CASE WHEN payment_type='cash' THEN total_amount ELSE 0 END) as cash_total,
+               SUM(CASE WHEN payment_type='installment' THEN total_amount ELSE 0 END) as inst_total
+        FROM store_sale
+        WHERE strftime('%Y', sale_date)=? AND status!='cancelled'
+        GROUP BY strftime('%m', sale_date)
+        ORDER BY month
+    """, [str(year)])
+
+def yearly_cost(year):
+    rows = fetchall("""
+        SELECT si.quantity, p.purchase_price
+        FROM store_saleitem si
+        JOIN store_product p ON p.id=si.product_id
+        JOIN store_sale s ON s.id=si.sale_id
+        WHERE strftime('%Y', s.sale_date)=? AND s.status!='cancelled'
+    """, [str(year)])
+    total = 0
+    for r in rows:
+        total += r['quantity'] * (r['purchase_price'] or 0)
+    return total
+
+def sales_by_category():
+    return fetchall("""
+        SELECT COALESCE(pt.name, 'بدون دسته') as category,
+               COUNT(DISTINCT s.id) as sale_count,
+               SUM(si.quantity) as qty,
+               SUM(si.subtotal) as revenue,
+               SUM(si.quantity * COALESCE(p.purchase_price,0)) as cost
+        FROM store_saleitem si
+        JOIN store_sale s ON s.id=si.sale_id
+        JOIN store_product p ON p.id=si.product_id
+        LEFT JOIN store_producttype pt ON pt.id=p.product_type_id
+        WHERE s.status!='cancelled'
+        GROUP BY pt.id
+        ORDER BY revenue DESC
+    """)
+
+def payment_method_summary():
+    return fetchall("""
+        SELECT payment_type,
+               COUNT(*) as sale_count,
+               SUM(total_amount) as total
+        FROM store_sale
+        WHERE status!='cancelled'
+        GROUP BY payment_type
+        ORDER BY total DESC
+    """)
+
+def installment_report():
+    return fetchall("""
+        SELECT i.*, c.first_name, c.last_name, c.phone,
+               s.total_amount, s.sale_date
+        FROM store_installment i
+        JOIN store_customer c ON c.id=i.customer_id
+        JOIN store_sale s ON s.id=i.sale_id
+        ORDER BY i.status, i.start_date DESC
+    """)
+
+def low_stock_products(threshold=5):
+    return fetchall("""
+        SELECT p.*, COALESCE(pt.name,'') as product_type_name
+        FROM store_product p
+        LEFT JOIN store_producttype pt ON pt.id=p.product_type_id
+        WHERE p.stock<=?
+        ORDER BY p.stock ASC, p.name
+    """, [threshold])
