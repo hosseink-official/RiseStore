@@ -1,55 +1,86 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, fetchone, fetchall
+from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, fetchone
 from desktop.fonts import get_font, get_bold_font
 from desktop.utils import format_number, format_date
+
+
+class Colors:
+    bg = '#f1f5f9'
+    card = '#ffffff'
+    accent = '#6366f1'
+    accent_hover = '#4f46e5'
+    success = '#10b981'
+    success_hover = '#059669'
+    danger = '#ef4444'
+    text_primary = '#0f172a'
+    text_secondary = '#475569'
+    text_muted = '#94a3b8'
+    border = '#e2e8f0'
+    border_light = '#f1f5f9'
 
 
 class CustomersView:
     def __init__(self, parent, app):
         self.app = app
         self.parent_frame = parent
-        self.frame = tk.Frame(parent, bg='#f0f2f5')
-        self.frame.pack(fill='both', expand=True, padx=24, pady=20)
+        self.frame = tk.Frame(parent, bg=Colors.bg)
+        self.frame.pack(fill='both', expand=True, padx=28, pady=24)
 
-        header = tk.Frame(self.frame, bg='#f0f2f5')
-        header.pack(fill='x', pady=(0, 16))
-        tk.Label(header, text='مشتریان', font=get_bold_font(18),
-                 bg='#f0f2f5', fg='#1e293b').pack(side='right')
-        tk.Button(header, text='+ مشتری جدید', font=get_font(10),
-                  bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
-                  padx=16, pady=6, command=self._add_customer).pack(side='left')
+        header = tk.Frame(self.frame, bg=Colors.bg)
+        header.pack(fill='x', pady=(0, 20))
+        tk.Label(header, text='مشتریان', font=get_bold_font(20),
+                 bg=Colors.bg, fg=Colors.text_primary).pack(side='right')
+        self._make_button(header, '➕  مشتری جدید', Colors.accent, Colors.accent_hover,
+                          self._add_customer).pack(side='left')
 
-        search_frame = tk.Frame(self.frame, bg='#ffffff',
-                                highlightbackground='#e2e8f0', highlightthickness=1)
-        search_frame.pack(fill='x', pady=(0, 12))
+        search_card = tk.Frame(self.frame, bg=Colors.card,
+                               highlightbackground=Colors.border, highlightthickness=1,
+                               padx=4, pady=4)
+        search_card.pack(fill='x', pady=(0, 16))
         self.search_var = tk.StringVar()
         self.search_var.trace('w', lambda *a: self._load_data())
-        tk.Entry(search_frame, textvariable=self.search_var,
-                 font=get_font(10), bd=0, bg='#ffffff',
-                 fg='#334155').pack(fill='x', ipady=6, padx=12)
+        search_entry = tk.Entry(search_card, textvariable=self.search_var,
+                                font=get_font(10), bd=0, bg=Colors.card,
+                                fg=Colors.text_primary)
+        search_entry.pack(fill='x', ipady=8, padx=8)
+        search_entry.insert(0, '')
+        search_placeholder = tk.Label(search_card, text='🔍  جستجوی مشتری...',
+                                      font=get_font(9), bg=Colors.card,
+                                      fg=Colors.text_muted)
+        search_placeholder.pack()
 
-        self.tree_frame = tk.Frame(self.frame, bg='#ffffff')
+        def on_focus_in(e):
+            search_placeholder.pack_forget()
+            search_entry.focus()
+
+        def on_focus_out(e):
+            if not search_entry.get():
+                search_placeholder.pack()
+
+        search_entry.bind('<FocusIn>', on_focus_in)
+        search_placeholder.bind('<Button-1>', on_focus_in)
+
+        self.tree_frame = tk.Frame(self.frame, bg=Colors.card,
+                                   highlightbackground=Colors.border, highlightthickness=1)
         self.tree_frame.pack(fill='both', expand=True)
 
-        columns = ('id', 'name', 'phone', 'national_id', 'created_at', 'total_debt', 'actions')
+        columns = ('total_debt', 'created_at', 'national_id', 'phone', 'name', 'id')
         self.tree = ttk.Treeview(self.tree_frame, columns=columns,
                                  show='headings', height=20)
-        self.tree.heading('id', text='#', anchor='center')
-        self.tree.heading('name', text='نام', anchor='e')
-        self.tree.heading('phone', text='شماره تماس', anchor='center')
-        self.tree.heading('national_id', text='کد ملی', anchor='center')
-        self.tree.heading('created_at', text='تاریخ ثبت', anchor='center')
         self.tree.heading('total_debt', text='بدهی', anchor='center')
-        self.tree.heading('actions', text='', anchor='center')
+        self.tree.heading('created_at', text='تاریخ ثبت', anchor='center')
+        self.tree.heading('national_id', text='کد ملی', anchor='center')
+        self.tree.heading('phone', text='شماره تماس', anchor='center')
+        self.tree.heading('name', text='نام', anchor='e')
+        self.tree.heading('id', text='#', anchor='center')
 
-        self.tree.column('id', width=50, anchor='center')
-        self.tree.column('name', width=180, anchor='e')
-        self.tree.column('phone', width=120, anchor='center')
-        self.tree.column('national_id', width=120, anchor='center')
-        self.tree.column('created_at', width=120, anchor='center')
         self.tree.column('total_debt', width=120, anchor='center')
-        self.tree.column('actions', width=120, anchor='center')
+        self.tree.column('created_at', width=120, anchor='center')
+        self.tree.column('national_id', width=120, anchor='center')
+        self.tree.column('phone', width=130, anchor='center')
+        self.tree.column('name', width=200, anchor='e')
+        self.tree.column('id', width=50, anchor='center')
 
         scrollbar = ttk.Scrollbar(self.tree_frame, orient='vertical',
                                   command=self.tree.yview)
@@ -58,9 +89,15 @@ class CustomersView:
         scrollbar.pack(side='left', fill='y')
 
         self.tree.bind('<Double-1>', self._on_double_click)
-        self.tree.bind('<ButtonRelease-1>', self._on_click)
+        self.tree.bind('<Button-3>', self._on_right_click)
 
         self._load_data()
+
+    def _make_button(self, parent, text, bg, active_bg, command):
+        return tk.Button(parent, text=text, font=get_font(10),
+                         bg=bg, fg='#ffffff', bd=0, cursor='hand2',
+                         padx=18, pady=8, activebackground=active_bg,
+                         command=command)
 
     def _load_data(self):
         for item in self.tree.get_children():
@@ -75,13 +112,12 @@ class CustomersView:
             debt_total = max(0, (total['s'] or 0) - (paid['s'] or 0))
 
             self.tree.insert('', 'end', values=(
-                c['id'],
-                f"{c['first_name']} {c['last_name']}",
-                c['phone'] or '—',
-                c['national_id'] or '—',
-                format_date(c['created_at']),
                 format_number(debt_total),
-                '✏️  🗑️',
+                format_date(c['created_at']),
+                c['national_id'] or '—',
+                c['phone'] or '—',
+                f"{c['first_name']} {c['last_name']}",
+                c['id'],
             ))
 
     def _add_customer(self):
@@ -95,27 +131,36 @@ class CustomersView:
     def _show_customer_form(self, customer=None):
         win = tk.Toplevel(self.frame)
         win.title('ویرایش مشتری' if customer else 'مشتری جدید')
-        win.geometry('450x350')
-        win.configure(bg='#ffffff')
+        win.geometry('480x420')
+        win.configure(bg=Colors.card)
         win.resizable(False, False)
 
-        form = tk.Frame(win, bg='#ffffff', padx=24, pady=20)
+        header = tk.Frame(win, bg=Colors.accent, height=48)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text=win.title(), font=get_bold_font(12),
+                 bg=Colors.accent, fg='#ffffff').pack(expand=True)
+
+        form = tk.Frame(win, bg=Colors.card, padx=32, pady=24)
         form.pack(fill='both', expand=True)
 
         fields = {}
         for label, key in [('نام', 'first_name'), ('نام خانوادگی', 'last_name'),
                            ('شماره تماس', 'phone'), ('کد ملی', 'national_id'),
                            ('آدرس', 'address')]:
-            row = tk.Frame(form, bg='#ffffff')
-            row.pack(fill='x', pady=4)
-            tk.Label(row, text=label, font=get_font(9), bg='#ffffff',
-                     fg='#475569', width=12, anchor='e').pack(side='right')
+            row = tk.Frame(form, bg=Colors.card)
+            row.pack(fill='x', pady=5)
+            tk.Label(row, text=label, font=get_font(9), bg=Colors.card,
+                     fg=Colors.text_secondary, width=12, anchor='e').pack(side='right')
             var = tk.StringVar()
             if customer:
                 var.set(customer.get(key) or '')
-            tk.Entry(row, textvariable=var, font=get_font(10),
-                     bd=1, relief='solid', bg='#ffffff').pack(
-                         side='right', fill='x', expand=True, padx=(8, 0))
+            entry = tk.Entry(row, textvariable=var, font=get_font(10),
+                             bd=1, relief='solid', bg=Colors.card,
+                             highlightbackground=Colors.border,
+                             highlightcolor=Colors.accent,
+                             highlightthickness=1)
+            entry.pack(side='right', fill='x', expand=True, padx=(10, 0), ipady=4)
             fields[key] = var
 
         def save():
@@ -127,42 +172,35 @@ class CustomersView:
             win.destroy()
             self._load_data()
 
-        btn_frame = tk.Frame(form, bg='#ffffff')
-        btn_frame.pack(fill='x', pady=(20, 0))
-        tk.Button(btn_frame, text='ذخیره', font=get_font(10),
-                  bg='#2563eb', fg='#ffffff', bd=0, cursor='hand2',
-                  padx=20, pady=6, command=save).pack(side='left')
-        tk.Button(btn_frame, text='انصراف', font=get_font(10),
-                  bg='#e2e8f0', fg='#475569', bd=0, cursor='hand2',
-                  padx=20, pady=6,
-                  command=win.destroy).pack(side='left', padx=(8, 0))
+        btn_frame = tk.Frame(form, bg=Colors.card)
+        btn_frame.pack(fill='x', pady=(24, 0))
+        self._make_button(btn_frame, '💾  ذخیره', Colors.accent, Colors.accent_hover,
+                          save).pack(side='left', padx=(0, 8))
+        self._make_button(btn_frame, '✕  انصراف', Colors.text_muted, Colors.border,
+                          win.destroy).pack(side='left')
 
     def _delete_customer(self, customer_id):
         if messagebox.askyesno('تأیید حذف', 'آیا از حذف این مشتری اطمینان دارید؟'):
             delete_customer(customer_id)
             self._load_data()
 
-    def _on_click(self, event):
-        region = self.tree.identify_region(event.x, event.y)
-        if region != 'cell':
-            return
-        col = self.tree.identify_column(event.x)
+    def _on_right_click(self, event):
         item = self.tree.identify_row(event.y)
         if not item:
             return
         values = self.tree.item(item, 'values')
         if not values:
             return
-        cid = int(values[0])
-        if col == '#7':
-            bbox = self.tree.bbox(item, '#7')
-            if not bbox:
-                return
-            x_rel = event.x - bbox[0]
-            if x_rel < 60:
-                self._edit_customer(cid)
-            else:
-                self._delete_customer(cid)
+        cid = int(values[-1])
+        menu = tk.Menu(self.frame, tearoff=0, font=get_font(9),
+                       bg=Colors.card, fg=Colors.text_primary,
+                       activebackground=Colors.accent, activeforeground='#ffffff')
+        menu.add_command(label='✏️  ویرایش', command=lambda: self._edit_customer(cid))
+        menu.add_command(label='🗑️  حذف', command=lambda: self._delete_customer(cid))
+        menu.add_separator()
+        menu.add_command(label='📋  مشاهده جزئیات',
+                         command=lambda: self._show_customer_detail(cid))
+        menu.post(event.x_root, event.y_root)
 
     def _on_double_click(self, event):
         item = self.tree.identify_row(event.y)
@@ -170,7 +208,7 @@ class CustomersView:
             return
         values = self.tree.item(item, 'values')
         if values:
-            self._show_customer_detail(int(values[0]))
+            self._show_customer_detail(int(values[-1]))
 
     def _show_customer_detail(self, customer_id):
         c = get_customer(customer_id)
@@ -179,84 +217,101 @@ class CustomersView:
 
         win = tk.Toplevel(self.frame)
         win.title(f"{c['first_name']} {c['last_name']}")
-        win.geometry('800x600')
-        win.configure(bg='#f0f2f5')
+        win.geometry('820x620')
+        win.configure(bg=Colors.bg)
 
-        main = tk.Frame(win, bg='#f0f2f5', padx=20, pady=16)
+        main = tk.Frame(win, bg=Colors.bg, padx=24, pady=20)
         main.pack(fill='both', expand=True)
 
-        info = tk.Frame(main, bg='#ffffff', highlightbackground='#e2e8f0',
-                        highlightthickness=1, padx=16, pady=12)
-        info.pack(fill='x', pady=(0, 12))
+        info = tk.Frame(main, bg=Colors.card, highlightbackground=Colors.border,
+                        highlightthickness=1, padx=20, pady=16)
+        info.pack(fill='x', pady=(0, 16))
 
-        tk.Label(info, text=f"{c['first_name']} {c['last_name']}",
-                 font=get_bold_font(14), bg='#ffffff',
-                 fg='#1e293b').pack(anchor='e')
-        for label, val in [('شماره تماس', c.get('phone')), ('کد ملی', c.get('national_id')),
-                           ('آدرس', c.get('address')), ('تاریخ ثبت', format_date(c.get('created_at')))]:
-            r = tk.Frame(info, bg='#ffffff')
+        name_frame = tk.Frame(info, bg=Colors.card)
+        name_frame.pack(fill='x')
+        tk.Label(name_frame, text=f"{c['first_name']} {c['last_name']}",
+                 font=get_bold_font(16), bg=Colors.card,
+                 fg=Colors.text_primary).pack(side='right')
+        tk.Button(name_frame, text='✏️  ویرایش', font=get_font(9),
+                  bg=Colors.accent, fg='#ffffff', bd=0, cursor='hand2',
+                  padx=10, pady=4, activebackground=Colors.accent_hover,
+                  command=lambda: self._edit_customer(c['id'])).pack(side='left', padx=(0, 6))
+        tk.Button(name_frame, text='🗑️  حذف', font=get_font(9),
+                  bg=Colors.danger, fg='#ffffff', bd=0, cursor='hand2',
+                  padx=10, pady=4, activebackground=Colors.danger,
+                  command=lambda: (win.destroy(), self._delete_customer(c['id']))).pack(side='left')
+
+        info_grid = tk.Frame(info, bg=Colors.card)
+        info_grid.pack(fill='x', pady=(8, 0))
+        for i, (label, val) in enumerate([('شماره تماس', c.get('phone')),
+                                          ('کد ملی', c.get('national_id')),
+                                          ('آدرس', c.get('address')),
+                                          ('تاریخ ثبت', format_date(c.get('created_at')))]):
+            r = tk.Frame(info_grid, bg=Colors.card)
             r.pack(fill='x', pady=1)
-            tk.Label(r, text=label, font=get_font(9), bg='#ffffff',
-                     fg='#64748b', width=12, anchor='e').pack(side='right')
-            tk.Label(r, text=val or '—', font=get_font(9), bg='#ffffff',
-                     fg='#334155').pack(side='right', padx=(8, 0))
+            tk.Label(r, text=label, font=get_font(9), bg=Colors.card,
+                     fg=Colors.text_muted, width=12, anchor='e').pack(side='right')
+            tk.Label(r, text=val or '—', font=get_font(9), bg=Colors.card,
+                     fg=Colors.text_secondary).pack(side='right', padx=(10, 0))
 
-        tk.Label(main, text='فروش‌ها', font=get_bold_font(12),
-                 bg='#f0f2f5', fg='#1e293b').pack(anchor='e', pady=(0, 8))
+        tk.Label(main, text='فروش‌ها', font=get_bold_font(13),
+                 bg=Colors.bg, fg=Colors.text_primary).pack(anchor='e', pady=(0, 8))
 
         sales = get_customer_sales(customer_id)
         if sales:
-            cols = ('id', 'date', 'total', 'status', 'type')
+            cols = ('type', 'status', 'total', 'date', 'id')
             tree = ttk.Treeview(main, columns=cols, show='headings', height=6)
-            tree.heading('id', text='#')
-            tree.heading('date', text='تاریخ')
-            tree.heading('total', text='مبلغ')
-            tree.heading('status', text='وضعیت')
-            tree.heading('type', text='نوع')
-            tree.column('id', width=50, anchor='center')
-            tree.column('date', width=120, anchor='center')
-            tree.column('total', width=120, anchor='center')
-            tree.column('status', width=100, anchor='center')
+            tree.heading('type', text='نوع', anchor='center')
+            tree.heading('status', text='وضعیت', anchor='center')
+            tree.heading('total', text='مبلغ', anchor='center')
+            tree.heading('date', text='تاریخ', anchor='center')
+            tree.heading('id', text='#', anchor='center')
             tree.column('type', width=100, anchor='center')
-            tree.pack(fill='x', pady=(0, 12))
+            tree.column('status', width=100, anchor='center')
+            tree.column('total', width=120, anchor='center')
+            tree.column('date', width=120, anchor='center')
+            tree.column('id', width=50, anchor='center')
+            tree.pack(fill='x', pady=(0, 16))
 
             status_map = {'paid': 'تسویه', 'pending': 'در انتظار',
                           'partial': 'جزئی', 'cancelled': 'لغو'}
             type_map = {'cash': 'نقدی', 'installment': 'قسطی'}
             for s in sales:
                 tree.insert('', 'end', values=(
-                    s['id'], format_date(s['sale_date']),
-                    format_number(s['total_amount']),
-                    status_map.get(s['status'], s['status']),
                     type_map.get(s['payment_type'], s['payment_type']),
+                    status_map.get(s['status'], s['status']),
+                    format_number(s['total_amount']),
+                    format_date(s['sale_date']),
+                    s['id'],
                 ))
         else:
             tk.Label(main, text='هیچ فروشی وجود ندارد', font=get_font(9),
-                     bg='#f0f2f5', fg='#94a3b8').pack(pady=10)
+                     bg=Colors.bg, fg=Colors.text_muted).pack(pady=10)
 
-        tk.Label(main, text='پرداخت‌ها', font=get_bold_font(12),
-                 bg='#f0f2f5', fg='#1e293b').pack(anchor='e', pady=(0, 8))
+        tk.Label(main, text='پرداخت‌ها', font=get_bold_font(13),
+                 bg=Colors.bg, fg=Colors.text_primary).pack(anchor='e', pady=(0, 8))
 
         payments = get_customer_payments(customer_id)
         if payments:
-            cols = ('id', 'date', 'amount', 'sale')
+            cols = ('sale', 'amount', 'date', 'id')
             tree2 = ttk.Treeview(main, columns=cols, show='headings', height=6)
-            tree2.heading('id', text='#')
-            tree2.heading('date', text='تاریخ')
-            tree2.heading('amount', text='مبلغ')
-            tree2.heading('sale', text='فروش')
-            tree2.column('id', width=50, anchor='center')
-            tree2.column('date', width=120, anchor='center')
-            tree2.column('amount', width=120, anchor='center')
+            tree2.heading('sale', text='فروش', anchor='center')
+            tree2.heading('amount', text='مبلغ', anchor='center')
+            tree2.heading('date', text='تاریخ', anchor='center')
+            tree2.heading('id', text='#', anchor='center')
             tree2.column('sale', width=100, anchor='center')
+            tree2.column('amount', width=120, anchor='center')
+            tree2.column('date', width=120, anchor='center')
+            tree2.column('id', width=50, anchor='center')
             tree2.pack(fill='x')
 
             for p in payments:
                 tree2.insert('', 'end', values=(
-                    p['id'], format_date(p['payment_date']),
-                    format_number(p['amount']),
                     f"#{p['sale_id']}" if p.get('sale_id') else '—',
+                    format_number(p['amount']),
+                    format_date(p['payment_date']),
+                    p['id'],
                 ))
         else:
             tk.Label(main, text='هیچ پرداختی وجود ندارد', font=get_font(9),
-                     bg='#f0f2f5', fg='#94a3b8').pack(pady=10)
+                     bg=Colors.bg, fg=Colors.text_muted).pack(pady=10)

@@ -231,6 +231,31 @@ def auth_user(username, password):
         return user
     return None
 
+def get_user(uid):
+    return fetchone("SELECT * FROM auth_user WHERE id=?", [uid])
+
+def get_all_users():
+    return fetchall("SELECT * FROM auth_user ORDER BY date_joined DESC")
+
+def create_user(data):
+    pw = make_password(data['password'])
+    return execute(
+        "INSERT INTO auth_user (password, username, first_name, last_name, email, is_staff, is_active, date_joined) VALUES (?,?,?,?,?,?,?,datetime('now'))",
+        [pw, data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 1]
+    )
+
+def update_user(uid, data):
+    if data.get('password'):
+        pw = make_password(data['password'])
+        execute("UPDATE auth_user SET password=? WHERE id=?", [pw, uid])
+    execute(
+        "UPDATE auth_user SET username=?, first_name=?, last_name=?, email=?, is_staff=?, is_active=? WHERE id=?",
+        [data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 1, uid]
+    )
+
+def delete_user(uid):
+    execute("DELETE FROM auth_user WHERE id=?", [uid])
+
 def get_customer(cid):
     return fetchone("SELECT * FROM store_customer WHERE id=?", [cid])
 
@@ -325,6 +350,7 @@ def update_product_type(tid, data):
     execute("UPDATE store_producttype SET name=?, description=? WHERE id=?", [data['name'], data.get('description',''), tid])
 
 def delete_product_type(tid):
+    execute("UPDATE store_product SET product_type_id=NULL WHERE product_type_id=?", [tid])
     execute("DELETE FROM store_producttype WHERE id=?", [tid])
 
 def get_sale(sid):
@@ -416,10 +442,10 @@ def get_installments(sale_id, customer_id):
 def get_installment(iid):
     return fetchone("SELECT * FROM store_installment WHERE id=?", [iid])
 
-def create_installment(sale_id, customer_id, total_amount):
+def create_installment(sale_id, customer_id, total_amount, due_days=1):
     return execute(
-        "INSERT INTO store_installment (sale_id, customer_id, total_count, paid_count, amount_per_term, due_day, status, start_date) VALUES (?,?,6,0,?,1,'active',date('now'))",
-        [sale_id, customer_id, max(1, total_amount // 6)]
+        "INSERT INTO store_installment (sale_id, customer_id, total_count, paid_count, amount_per_term, due_day, status, start_date) VALUES (?,?,6,0,?,?,'active',date('now'))",
+        [sale_id, customer_id, max(1, total_amount // 6), due_days]
     )
 
 def update_installment(iid, paid_count, amount_paid):
@@ -535,7 +561,8 @@ def payment_method_summary():
 def installment_report():
     return fetchall("""
         SELECT i.*, c.first_name, c.last_name, c.phone,
-               s.total_amount, s.sale_date
+               s.total_amount, s.sale_date,
+               (SELECT MAX(payment_date) FROM store_payment WHERE installment_id=i.id) as last_payment_date
         FROM store_installment i
         JOIN store_customer c ON c.id=i.customer_id
         JOIN store_sale s ON s.id=i.sale_id
