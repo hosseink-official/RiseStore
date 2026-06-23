@@ -1,128 +1,18 @@
 import tkinter as tk
 from tkinter import ttk
-from desktop.fonts import get_font, get_bold_font
-
-
-class Colors:
-    primary = '#0f172a'
-    primary_light = '#1e293b'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    accent_light = '#eef2ff'
-    success = '#10b981'
-    success_hover = '#059669'
-    success_light = '#ecfdf5'
-    warning = '#f59e0b'
-    warning_light = '#fffbeb'
-    danger = '#ef4444'
-    danger_hover = '#dc2626'
-    danger_light = '#fef2f2'
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
-    border_light = '#f1f5f9'
-    sidebar_text = '#cbd5e1'
-    sidebar_text_hover = '#ffffff'
-    sidebar_active = '#6366f1'
-    sidebar_active_bg = '#1e293b'
+from desktop.theme import Colors, get_font, get_bold_font, apply_theme
 
 
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.user = None
-        self._setup_styles()
+        apply_theme(root)
 
         self.container = tk.Frame(root, bg=Colors.bg)
         self.container.pack(fill='both', expand=True)
 
         self._show_login()
-
-    def _setup_styles(self):
-        style = ttk.Style()
-        style.theme_use('clam')
-
-        style.configure('.', font=get_font(10))
-        style.configure('TFrame', background=Colors.bg)
-        style.configure('TLabel', background=Colors.bg, foreground=Colors.text_primary)
-
-        style.configure('Card.TFrame', background=Colors.card, relief='solid', borderwidth=1)
-        style.map('Card.TFrame', background=[('active', Colors.card)])
-
-        style.configure('CardTitle.TLabel', font=get_bold_font(13),
-                        background=Colors.card, foreground=Colors.text_primary)
-        style.configure('StatValue.TLabel', font=get_bold_font(24),
-                        background=Colors.card, foreground=Colors.text_primary)
-        style.configure('StatLabel.TLabel', font=get_font(9),
-                        background=Colors.card, foreground=Colors.text_muted)
-
-        style.configure('Primary.TButton', font=get_font(10),
-                        background=Colors.accent, foreground='#ffffff',
-                        padding=(18, 9), borderwidth=0)
-        style.map('Primary.TButton',
-                  background=[('active', Colors.accent_hover), ('disabled', Colors.text_muted)],
-                  relief=[('pressed', 'sunken')])
-
-        style.configure('Success.TButton', font=get_font(10),
-                        background=Colors.success, foreground='#ffffff',
-                        padding=(18, 9), borderwidth=0)
-        style.map('Success.TButton',
-                  background=[('active', Colors.success_hover)],
-                  relief=[('pressed', 'sunken')])
-
-        style.configure('Ghost.TButton', font=get_font(10),
-                        background=Colors.card, foreground=Colors.text_secondary,
-                        padding=(14, 7), borderwidth=1, relief='solid')
-        style.map('Ghost.TButton',
-                  background=[('active', Colors.bg)],
-                  relief=[('pressed', 'sunken')])
-
-        style.configure('Danger.TButton', font=get_font(10),
-                        background=Colors.danger, foreground='#ffffff',
-                        padding=(14, 7), borderwidth=0)
-        style.map('Danger.TButton',
-                  background=[('active', Colors.danger_hover)],
-                  relief=[('pressed', 'sunken')])
-
-        style.configure('Heading.TLabel', font=get_bold_font(18),
-                        foreground=Colors.text_primary, background=Colors.bg)
-        style.configure('Subheading.TLabel', font=get_font(10),
-                        foreground=Colors.text_muted, background=Colors.bg)
-
-        style.configure('Sidebar.TFrame', background=Colors.primary)
-        style.configure('SidebarTitle.TLabel', font=get_bold_font(15),
-                        background=Colors.primary, foreground='#ffffff')
-        style.configure('SidebarSubtitle.TLabel', font=get_font(8),
-                        background=Colors.primary, foreground=Colors.sidebar_text)
-
-        style.configure('Treeview', font=get_font(9), foreground=Colors.text_primary,
-                        background=Colors.card, fieldbackground=Colors.card,
-                        borderwidth=0, rowheight=32)
-        style.configure('Treeview.Heading', font=get_bold_font(9),
-                        background=Colors.border_light, foreground=Colors.text_secondary,
-                        borderwidth=1, relief='solid', padding=(6, 5))
-        style.map('Treeview',
-                  background=[('selected', Colors.accent_light)],
-                  foreground=[('selected', Colors.accent)])
-
-        style.configure('TNotebook', background=Colors.bg, borderwidth=0)
-        style.configure('TNotebook.Tab', font=get_font(9),
-                        padding=(12, 6), background=Colors.border_light,
-                        foreground=Colors.text_secondary)
-        style.map('TNotebook.Tab',
-                  background=[('selected', Colors.card)],
-                  foreground=[('selected', Colors.accent)])
-
-        style.configure('TCombobox', font=get_font(9), padding=(4, 2))
-        style.map('TCombobox',
-                  fieldbackground=[('readonly', Colors.card)],
-                  selectbackground=[('readonly', Colors.card)],
-                  selectforeground=[('readonly', Colors.text_primary)])
-
-        style.configure('TSpinbox', font=get_font(9), padding=(2, 2))
 
     def _show_login(self):
         for w in self.container.winfo_children():
@@ -163,9 +53,8 @@ class App:
             ('product_types', 'انواع محصول', '📦'),
             ('products', 'محصولات', '🏷️'),
             ('sales', 'فروش‌ها', '🧾'),
-
-            ('users', 'کاربران', '🔐'),
             ('reports', 'گزارش‌ها', '📈'),
+            ('appearance', 'تنظیمات ظاهر', '🎨'),
         ]
 
         nav_frame = tk.Frame(sidebar, bg=Colors.primary)
@@ -195,8 +84,33 @@ class App:
         footer = tk.Frame(sidebar, bg=Colors.primary)
         footer.pack(fill='x', side='bottom')
 
+        sep3 = tk.Frame(sidebar, bg=Colors.primary_light, height=1)
+        sep3.pack(fill='x', padx=16, side='bottom', before=footer)
+
+        user_frame = tk.Frame(sidebar, bg=Colors.primary)
+        user_frame.pack(fill='x', side='bottom', before=sep3)
+
+        user_btn_frame = tk.Frame(user_frame, bg=Colors.primary)
+        user_btn_frame.pack(fill='x', pady=1)
+
+        user_indicator = tk.Frame(user_btn_frame, bg=Colors.primary, width=3)
+        user_indicator.pack(side='right', fill='y')
+
+        user_btn = tk.Button(user_btn_frame, text='  🔐  کاربران',
+                             font=get_font(11),
+                             bg=Colors.primary, fg=Colors.sidebar_text,
+                             activebackground=Colors.primary_light,
+                             activeforeground=Colors.sidebar_text_hover,
+                             bd=0, anchor='w', padx=14, pady=6,
+                             cursor='hand2',
+                             command=lambda: self._navigate('users'))
+        user_btn.pack(fill='both', expand=True, side='right')
+
+        user_btn.indicator = user_indicator
+        self.nav_buttons['users'] = (user_btn, user_indicator)
+
         sep2 = tk.Frame(sidebar, bg=Colors.primary_light, height=1)
-        sep2.pack(fill='x', padx=16, side='bottom', before=footer)
+        sep2.pack(fill='x', padx=16, side='bottom', before=user_frame)
 
         logout_btn = tk.Button(footer, text='🚪  خروج',
                                font=get_font(11),
@@ -242,6 +156,9 @@ class App:
         elif key == 'reports':
             from desktop.views.reports import ReportsView
             ReportsView(self.content_frame, self)
+        elif key == 'appearance':
+            from desktop.views.appearance import AppearanceView
+            AppearanceView(self.content_frame, self)
 
     def _show_dashboard(self):
         self._navigate('dashboard')

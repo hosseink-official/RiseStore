@@ -1,32 +1,15 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 from desktop.db import (
     get_all_sales, get_sale, get_all_products, get_product,
     get_sale_items, get_sale_payments, sale_remaining,
     sale_total_paid, update_sale_status,
     create_sale, create_sale_item, create_payment, create_installment,
     get_customer, get_all_customers, create_customer, fetchall, fetchone,
-    get_product_prices, get_installments
+    get_product_prices, get_installments, delete_payment, update_payment
 )
-from desktop.fonts import get_font, get_bold_font
-from desktop.utils import format_number, format_date, format_datetime, add_number_comma_formatting, clean_number
-
-
-class Colors:
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    success = '#10b981'
-    success_hover = '#059669'
-    danger = '#ef4444'
-    danger_hover = '#dc2626'
-    warning = '#f59e0b'
-    accent_light = '#eef2ff'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
+from desktop.theme import Colors, get_font, get_bold_font
+from desktop.utils import format_number, format_date, format_datetime, add_number_comma_formatting, clean_number, persian_askinteger, persian_digits
 
 
 
@@ -91,6 +74,8 @@ class SalesListView:
         columns = ('status', 'type', 'remaining', 'total', 'date', 'customer', 'id')
         self.tree = ttk.Treeview(table_card, columns=columns,
                                  show='headings', height=20)
+        self.tree.tag_configure('even', background=Colors.card)
+        self.tree.tag_configure('odd', background=Colors.border_light)
 
         col_headers = {
             'status': 'وضعیت', 'type': 'نوع', 'remaining': 'باقی‌مانده',
@@ -177,8 +162,8 @@ class SalesListView:
             rows.append((sort_key, row))
         if self._sort_col:
             rows.sort(key=lambda x: x[0], reverse=self._sort_rev)
-        for _, row in rows:
-            self.tree.insert('', 'end', values=row)
+        for i, (_, row) in enumerate(rows):
+            self.tree.insert('', 'end', values=row, tags=('even' if i % 2 == 0 else 'odd',))
         for key in uniq:
             vals = sorted(uniq[key], key=lambda x: int(clean_number(x)) if key in ('remaining', 'total', 'id') else x)
             self._filter_combos[key]['values'] = ['', *vals]
@@ -397,12 +382,10 @@ class SaleForm:
         cart_canvas.configure(yscrollcommand=cart_scroll.set)
         cart_canvas.pack(side='right', fill='both', expand=True, padx=4, pady=4)
         cart_scroll.pack(side='left', fill='y')
-        self._render_cart()
-
         self._total_frame = tk.Frame(right, bg=Colors.bg, highlightbackground=Colors.border,
                                      highlightthickness=1, padx=12, pady=8)
         self._total_frame.pack(fill='x', padx=4, pady=4)
-        self._update_total()
+        self._render_cart()
 
         left = tk.Frame(content, bg=Colors.card, highlightbackground=Colors.border,
                         highlightthickness=1)
@@ -434,7 +417,7 @@ class SaleForm:
 
             if (p['stock'] or 0) > 0:
                 btn = tk.Button(prod_frame,
-                                text=f"{p['name']} ({u}) — {format_number(p['selling_price'])} (موجودی: {p['stock']})",
+                                text=f"{p['name']} ({u}) — {format_number(p['selling_price'])} (موجودی: {persian_digits(p['stock'])})",
                                 font=get_font(9), bg=Colors.card, fg=Colors.text_secondary,
                                 bd=0, anchor='w', padx=10, pady=6,
                                 cursor='hand2',
@@ -443,7 +426,7 @@ class SaleForm:
 
             for pr in prices_with_stock:
                 btn = tk.Button(prod_frame,
-                                text=f"{p['name']} ({u}) — {pr['price_label']}: {format_number(pr['amount'])} (موجودی: {pr['stock']})",
+                                text=f"{p['name']} ({u}) — {pr['price_label']}: {format_number(pr['amount'])} (موجودی: {persian_digits(pr['stock'])})",
                                 font=get_font(9), bg=Colors.card, fg=Colors.accent,
                                 bd=0, anchor='w', padx=10, pady=6,
                                 cursor='hand2',
@@ -457,9 +440,18 @@ class SaleForm:
         p = get_product(pid)
         if not p:
             return
-        qty = simpledialog.askinteger('مقدار', f'{p["unit"]} {p["name"]}:',
-                                      minvalue=1, maxvalue=9999,
-                                      parent=self.frame.winfo_toplevel())
+        if price_id:
+            pp = fetchone("SELECT stock FROM store_product_price WHERE id=?", [price_id])
+            avail = pp['stock'] if pp else 0
+        else:
+            avail = p['stock'] or 0
+        if avail <= 0:
+            messagebox.showwarning('موجودی ناکافی', f'موجودی {p["name"]} به اتمام رسیده')
+            return
+        max_qty = min(avail, 9999)
+        qty = persian_askinteger('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
+                                 minvalue=1, maxvalue=max_qty,
+                                 parent=self.frame.winfo_toplevel())
         if qty is None:
             return
         if preset_price is not None:
@@ -519,8 +511,7 @@ class SaleForm:
             tk.Label(row, text=name_text, font=get_font(9),
                      bg=Colors.bg, fg=Colors.text_secondary).pack(side='right', padx=6)
 
-            unit = item['product'].get('unit') or ''
-            tk.Label(row, text=f"{item['quantity']} {unit} × {format_number(item['unit_price'])}",
+            tk.Label(row, text=f"{format_number(item['unit_price'])} × {persian_digits(item['quantity'])}",
                      font=get_font(9), bg=Colors.bg,
                      fg=Colors.text_muted).pack(side='right', padx=4)
 
@@ -732,10 +723,30 @@ class SaleDetailView:
             tk.Label(parent, text='فروش یافت نشد').pack()
             return
 
-        self.frame = tk.Frame(parent, bg=Colors.bg, padx=24, pady=20)
-        self.frame.pack(fill='both', expand=True)
+        canvas = tk.Canvas(parent, bg=Colors.bg, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient='vertical', command=canvas.yview)
+        self.frame = tk.Frame(canvas, bg=Colors.bg, padx=24, pady=20)
+
+        self.frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=self.frame, anchor='nw')
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side='right', fill='both', expand=True)
+        scrollbar.pack(side='left', fill='y')
+
+        self._bind_mousewheel(canvas)
 
         self._build(sale)
+
+    def _bind_mousewheel(self, canvas):
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        def _on_enter(event):
+            canvas.bind_all('<MouseWheel>', _on_mousewheel)
+        def _on_leave(event):
+            canvas.unbind_all('<MouseWheel>')
+        canvas.bind('<Enter>', _on_enter)
+        canvas.bind('<Leave>', _on_leave)
 
     def _build(self, sale):
         sale_id = self._sale_id
@@ -787,14 +798,18 @@ class SaleDetailView:
         tk.Label(frame, text='🧾  اقلام', font=get_bold_font(13),
                  bg=Colors.bg, fg=Colors.text_primary).pack(anchor='e', pady=(0, 8))
 
+        payment_type_map = {'cash': 'نقدی', 'installment_payment': 'پرداخت قسط', 'down_payment': 'پیش پرداخت'}
+
         items = get_sale_items(sale_id)
         if items:
             items_card = tk.Frame(frame, bg=Colors.card,
                                   highlightbackground=Colors.border, highlightthickness=1)
-            items_card.pack(fill='x', pady=(0, 16))
+            items_card.pack(fill='both', pady=(0, 16))
 
             cols = ('subtotal', 'price', 'qty', 'product')
             tree = ttk.Treeview(items_card, columns=cols, show='headings', height=6)
+            tree.tag_configure('even', background=Colors.card)
+            tree.tag_configure('odd', background=Colors.border_light)
             tree.heading('subtotal', text='جمع', anchor='center')
             tree.heading('price', text='قیمت واحد', anchor='center')
             tree.heading('qty', text='تعداد', anchor='center')
@@ -803,14 +818,19 @@ class SaleDetailView:
             tree.column('price', width=120, anchor='center')
             tree.column('qty', width=80, anchor='center')
             tree.column('product', width=300, anchor='e')
-            tree.pack(fill='x', padx=4, pady=4)
-            for item in items:
+            vsb1 = ttk.Scrollbar(items_card, orient='vertical', command=tree.yview)
+            tree.configure(yscrollcommand=vsb1.set)
+            tree.grid(row=0, column=0, sticky='nsew', padx=4, pady=4)
+            vsb1.grid(row=0, column=1, sticky='ns')
+            items_card.grid_rowconfigure(0, weight=1)
+            items_card.grid_columnconfigure(0, weight=1)
+            for i, item in enumerate(items):
                 tree.insert('', 'end', values=(
                     format_number(item['subtotal']),
                     format_number(item['unit_price']),
                     item['quantity'],
                     item.get('product_name') or '—',
-                ))
+                ), tags=('even' if i % 2 == 0 else 'odd',))
 
         tk.Label(frame, text='💳  پرداخت‌ها', font=get_bold_font(13),
                  bg=Colors.bg, fg=Colors.text_primary).pack(anchor='e', pady=(0, 8))
@@ -819,10 +839,12 @@ class SaleDetailView:
         if payments:
             pay_card = tk.Frame(frame, bg=Colors.card,
                                 highlightbackground=Colors.border, highlightthickness=1)
-            pay_card.pack(fill='x')
+            pay_card.pack(fill='both')
 
             cols = ('type', 'amount', 'date', 'id')
             tree2 = ttk.Treeview(pay_card, columns=cols, show='headings', height=5)
+            tree2.tag_configure('even', background=Colors.card)
+            tree2.tag_configure('odd', background=Colors.border_light)
             tree2.heading('type', text='نوع', anchor='center')
             tree2.heading('amount', text='مبلغ', anchor='center')
             tree2.heading('date', text='تاریخ', anchor='center')
@@ -831,14 +853,64 @@ class SaleDetailView:
             tree2.column('amount', width=140, anchor='center')
             tree2.column('date', width=140, anchor='center')
             tree2.column('id', width=50, anchor='center')
-            tree2.pack(fill='x', padx=4, pady=4)
-            for p in payments:
+            vsb2 = ttk.Scrollbar(pay_card, orient='vertical', command=tree2.yview)
+            tree2.configure(yscrollcommand=vsb2.set)
+            tree2.grid(row=0, column=0, sticky='nsew', padx=4, pady=4)
+            vsb2.grid(row=0, column=1, sticky='ns')
+            pay_card.grid_rowconfigure(0, weight=1)
+            pay_card.grid_columnconfigure(0, weight=1)
+            def _edit_payment():
+                sel = tree2.selection()
+                if not sel:
+                    return
+                values = tree2.item(sel[0], 'values')
+                pid = int(values[3])
+                cur_amount = int(clean_number(values[1]))
+                new_amt = persian_askinteger('ویرایش مبلغ پرداخت',
+                                             f'مبلغ جدید (مقدار فعلی: {format_number(cur_amount)}):',
+                                             minvalue=1, maxvalue=sale['total_amount'],
+                                             parent=self.frame.winfo_toplevel())
+                if new_amt is None:
+                    return
+                update_payment(pid, new_amt)
+                update_sale_status(sale_id)
+                for w in self.frame.winfo_children():
+                    w.destroy()
+                self._build(get_sale(sale_id))
+
+            def _delete_payment():
+                sel = tree2.selection()
+                if not sel:
+                    return
+                pid = tree2.item(sel[0], 'values')[3]
+                if messagebox.askyesno('تأیید حذف', 'آیا از حذف این پرداخت اطمینان دارید؟'):
+                    delete_payment(pid)
+                    update_sale_status(sale_id)
+                    for w in self.frame.winfo_children():
+                        w.destroy()
+                    self._build(get_sale(sale_id))
+
+            menu = tk.Menu(self.frame, tearoff=0, bg=Colors.card, fg=Colors.text_primary,
+                           font=get_font(9))
+            menu.add_command(label='✏️  ویرایش مبلغ', command=_edit_payment)
+            menu.add_separator()
+            menu.add_command(label='🗑️  حذف پرداخت', command=_delete_payment)
+
+            def _on_right_click(e):
+                item = tree2.identify_row(e.y)
+                if item:
+                    tree2.selection_set(item)
+                    menu.post(e.x_root, e.y_root)
+
+            tree2.bind('<Button-3>', _on_right_click)
+
+            for i, p in enumerate(payments):
                 tree2.insert('', 'end', values=(
-                    p['payment_type'],
+                    payment_type_map.get(p['payment_type'], p['payment_type']),
                     format_number(p['amount']),
                     format_date(p['payment_date']),
                     p['id'],
-                ))
+                ), tags=('even' if i % 2 == 0 else 'odd',))
 
     def _edit_status(self, sale_id):
         sale = get_sale(sale_id)
@@ -910,11 +982,10 @@ class SaleDetailView:
             default = max(1, remaining // remaining_count) if remaining_count > 0 else remaining
         else:
             default = remaining
-        amt = simpledialog.askinteger('ثبت پرداخت',
-                                      f'مبلغ پرداختی (باقی‌مانده: {format_number(remaining)}):',
-                                      minvalue=1, maxvalue=remaining,
-                                      initialvalue=default,
-                                      parent=self.frame.winfo_toplevel())
+        amt = persian_askinteger('ثبت پرداخت',
+                                 f'مبلغ پرداختی (باقی‌مانده: {format_number(remaining)}):',
+                                 minvalue=1, maxvalue=remaining,
+                                 parent=self.frame.winfo_toplevel())
         if amt is None:
             return
         if installments:

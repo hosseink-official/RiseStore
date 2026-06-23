@@ -5,22 +5,8 @@ from desktop.db import (
     create_payment, get_installments, get_installment, update_sale_status,
     sale_total_paid, get_all_payments, get_customer_payments, fetchall
 )
-from desktop.fonts import get_font, get_bold_font
+from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import format_number, format_date, add_number_comma_formatting, clean_number
-
-
-class Colors:
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    success = '#10b981'
-    success_hover = '#059669'
-    danger = '#ef4444'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
 
 
 def _make_button(parent, text, bg, active_bg, command):

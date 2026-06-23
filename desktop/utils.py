@@ -61,6 +61,88 @@ def format_number(n: int | float | None) -> str:
     return persian_digits(f'{n:,}')
 
 
+def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
+    import tkinter as tk
+    from tkinter import ttk
+
+    win = tk.Toplevel(parent)
+    win.title(title)
+    win.geometry('380x200')
+    win.configure(bg='#ffffff')
+    win.resizable(False, False)
+    win.transient(parent)
+    win.grab_set()
+
+    result = [None]
+
+    header = tk.Frame(win, bg='#6366f1', height=36)
+    header.pack(fill='x')
+    header.pack_propagate(False)
+    tk.Label(header, text=title, font=('TkDefaultFont', 10, 'bold'),
+             bg='#6366f1', fg='#ffffff').pack(expand=True)
+
+    body = tk.Frame(win, bg='#ffffff', padx=24, pady=16)
+    body.pack(fill='both', expand=True)
+
+    prompt_label = tk.Label(body, text=prompt, font=('TkDefaultFont', 10),
+                            bg='#ffffff', fg='#0f172a')
+    prompt_label.pack(anchor='e', pady=(0, 4))
+
+    tk.Label(body, text=f'حداقل: {persian_digits(f"{minvalue:,}")}  —  حداکثر: {persian_digits(f"{maxvalue:,}")}',
+             font=('TkDefaultFont', 8), bg='#ffffff', fg='#94a3b8').pack(anchor='e', pady=(0, 8))
+
+    var = tk.StringVar()
+    entry = tk.Entry(body, textvariable=var, font=('TkDefaultFont', 14),
+                     bd=1, relief='solid', highlightbackground='#e2e8f0',
+                     highlightcolor='#6366f1', highlightthickness=1,
+                     justify='center')
+    entry.pack(fill='x', ipady=6, pady=(0, 4))
+    entry.focus_set()
+    add_number_comma_formatting(var, entry)
+
+    warn_label = tk.Label(body, text='', font=('TkDefaultFont', 9),
+                          bg='#ffffff', fg='#ef4444')
+    warn_label.pack(anchor='e', pady=(0, 8))
+
+    def validate(val):
+        if val > maxvalue:
+            warn_label.config(text=f'حداکثر مقدار مجاز: {persian_digits(f"{maxvalue:,}")}')
+            return False
+        warn_label.config(text='')
+        return True
+
+    def submit():
+        raw = clean_number(var.get())
+        try:
+            val = int(raw)
+        except ValueError:
+            val = minvalue
+        if not validate(val):
+            return
+        result[0] = val
+        win.destroy()
+
+    def cancel():
+        win.destroy()
+
+    entry.bind('<Return>', lambda e: submit())
+
+    btn_frame = tk.Frame(body, bg='#ffffff')
+    btn_frame.pack(fill='x')
+    tk.Button(btn_frame, text='✅  تأیید', font=('TkDefaultFont', 10),
+              bg='#6366f1', fg='#ffffff', bd=0, cursor='hand2',
+              padx=20, pady=6, activebackground='#4f46e5',
+              command=submit).pack(side='left')
+    tk.Button(btn_frame, text='✕  انصراف', font=('TkDefaultFont', 10),
+              bg='#94a3b8', fg='#ffffff', bd=0, cursor='hand2',
+              padx=14, pady=6, activebackground='#64748b',
+              command=cancel).pack(side='left', padx=(8, 0))
+
+    win.protocol('WM_DELETE_WINDOW', cancel)
+    win.wait_window()
+    return result[0]
+
+
 def add_number_comma_formatting(var, entry=None):
     import tkinter as tk
 

@@ -1,23 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type, get_product_prices, create_product_price, update_product_price, delete_product_price, create_supply_entry, get_supply_log
-from desktop.fonts import get_font, get_bold_font
+from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import persian_digits, format_number, format_date, add_number_comma_formatting, clean_number
-
-
-class Colors:
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    success = '#10b981'
-    success_hover = '#059669'
-    danger = '#ef4444'
-    warning = '#f59e0b'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
 
 
 def _make_button(parent, text, bg, active_bg, command):

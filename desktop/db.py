@@ -430,6 +430,12 @@ def create_sale_item(sale_id, product_id, quantity, unit_price, subtotal, price_
         [sale_id, product_id, quantity, unit_price, subtotal]
     )
 
+def update_payment(pid, amount):
+    execute("UPDATE store_payment SET amount=? WHERE id=?", [amount, pid])
+
+def delete_payment(pid):
+    execute("DELETE FROM store_payment WHERE id=?", [pid])
+
 def create_payment(sale_id, customer_id, amount, payment_type, notes, received_by_id=1):
     return execute(
         "INSERT INTO store_payment (sale_id, customer_id, received_by_id, amount, payment_type, notes, payment_date) VALUES (?,?,?,?,?,?,datetime('now'))",

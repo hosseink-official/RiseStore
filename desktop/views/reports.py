@@ -6,25 +6,10 @@ from desktop.db import (
     yearly_sales, yearly_cost, sales_by_category, payment_method_summary,
     installment_report, low_stock_products
 )
-from desktop.fonts import get_font, get_bold_font
+from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import format_number, format_date
+from desktop.views.sales import SaleDetailView
 from datetime import date, timedelta, datetime
-
-
-class Colors:
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    success = '#10b981'
-    danger = '#ef4444'
-    warning = '#f59e0b'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
-    blue = '#3b82f6'
-    purple = '#a855f7'
 
 
 class ReportsView:
@@ -384,9 +369,10 @@ class ReportsView:
             except Exception:
                 return '—'
 
-        cols = ('next_due', 'status', 'progress', 'remaining', 'paid', 'per_term', 'total',
+        cols = ('sale_id', 'next_due', 'status', 'progress', 'remaining', 'paid', 'per_term', 'total',
                 'phone', 'customer')
         tree = ttk.Treeview(tc, columns=cols, show='headings', height=15)
+        tree.heading('sale_id', text='', anchor='center')
         tree.heading('next_due', text='سررسید بعدی', anchor='center')
         tree.heading('status', text='وضعیت', anchor='center')
         tree.heading('progress', text='پیشرفت', anchor='center')
@@ -396,6 +382,7 @@ class ReportsView:
         tree.heading('total', text='مبلغ کل', anchor='center')
         tree.heading('phone', text='تلفن', anchor='center')
         tree.heading('customer', text='مشتری', anchor='e')
+        tree.column('sale_id', width=0, stretch=False)
         tree.column('next_due', width=110, anchor='center')
         tree.column('status', width=70, anchor='center')
         tree.column('progress', width=70, anchor='center')
@@ -405,6 +392,20 @@ class ReportsView:
         tree.column('total', width=110, anchor='center')
         tree.column('phone', width=100, anchor='center')
         tree.column('customer', width=200, anchor='e')
+
+        def _open_sale(event):
+            item = tree.identify_row(event.y)
+            if not item:
+                return
+            values = tree.item(item, 'values')
+            if values:
+                win = tk.Toplevel(self.frame)
+                win.title(f'فروش #{values[0]}')
+                win.geometry('900x680')
+                win.configure(bg=Colors.bg)
+                SaleDetailView(win, int(values[0]), self.app)
+
+        tree.bind('<Double-1>', _open_sale)
 
         scrollbar = ttk.Scrollbar(tc, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
@@ -418,6 +419,7 @@ class ReportsView:
             status_text = 'فعال' if i['status'] == 'active' else 'تسویه'
             next_due = _next_due(i['start_date'], i.get('last_payment_date'), i['due_day'], i['status'])
             tree.insert('', 'end', values=(
+                i['sale_id'],
                 next_due,
                 status_text,
                 progress,

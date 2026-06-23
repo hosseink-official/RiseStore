@@ -1,20 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.fonts import get_font, get_bold_font
+from desktop.theme import Colors, get_font, get_bold_font
 from desktop.db import auth_user
-
-
-class Colors:
-    bg = '#f1f5f9'
-    card = '#ffffff'
-    accent = '#6366f1'
-    accent_hover = '#4f46e5'
-    text_primary = '#0f172a'
-    text_secondary = '#475569'
-    text_muted = '#94a3b8'
-    border = '#e2e8f0'
-    danger = '#ef4444'
-    success = '#10b981'
 
 
 class LoginView:
