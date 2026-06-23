@@ -43,8 +43,16 @@ class CustomersView:
             if not search_entry.get():
                 search_placeholder.pack()
 
+        def on_search_changed(*_):
+            if not search_entry.get():
+                search_placeholder.pack()
+            else:
+                search_placeholder.pack_forget()
+
         search_entry.bind('<FocusIn>', on_focus_in)
+        search_entry.bind('<FocusOut>', on_focus_out)
         search_placeholder.bind('<Button-1>', on_focus_in)
+        self.search_var.trace('w', on_search_changed)
 
         self.tree_frame = tk.Frame(self.frame, bg=Colors.card,
                                    highlightbackground=Colors.border, highlightthickness=1)

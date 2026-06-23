@@ -210,8 +210,8 @@ class ReportsView:
         tree.pack(side='right', fill='both', expand=True)
         scrollbar.pack(side='left', fill='y')
 
-        month_names = ['', 'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-                       'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
+        month_names = ['', 'ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن',
+                       'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر']
         for r in months:
             m = int(r['month'])
             tree.insert('', 'end', values=(
@@ -359,12 +359,16 @@ class ReportsView:
             ('تسویه شده', str(len(paid_inst)), Colors.success),
         ])
 
-        def _next_due(start_date_str, last_payment_date_str, due_days, status):
+        def _next_due(start_date_str, last_payment_date_str, due_days, status, total_count, paid_count):
             if status != 'active':
                 return '—'
+            if total_count <= 0:
+                return '—'
             try:
+                interval = max(1, due_days // total_count) if due_days > 0 else 30
                 base = last_payment_date_str or start_date_str
-                nd = datetime.strptime(base, '%Y-%m-%d').date() + timedelta(days=due_days)
+                due = paid_count * interval
+                nd = datetime.strptime(base, '%Y-%m-%d').date() + timedelta(days=due)
                 return format_date(nd.isoformat())
             except Exception:
                 return '—'
@@ -413,11 +417,10 @@ class ReportsView:
         scrollbar.pack(side='left', fill='y')
 
         for i in installments:
-            total_inst = i['total_count'] * i['amount_per_term']
-            remaining = max(0, total_inst - (i['amount_paid'] or 0))
+            remaining = max(0, (i['total_amount'] or 0) - (i['amount_paid'] or 0))
             progress = f"{i['paid_count']}/{i['total_count']}"
             status_text = 'فعال' if i['status'] == 'active' else 'تسویه'
-            next_due = _next_due(i['start_date'], i.get('last_payment_date'), i['due_day'], i['status'])
+            next_due = _next_due(i['start_date'], i.get('last_payment_date'), i['due_day'], i['status'], i['total_count'], i['paid_count'])
             tree.insert('', 'end', values=(
                 i['sale_id'],
                 next_due,
@@ -426,7 +429,7 @@ class ReportsView:
                 format_number(remaining),
                 format_number(i['amount_paid']),
                 format_number(i['amount_per_term']),
-                format_number(total_inst),
+                format_number(i['total_amount']),
                 i.get('phone') or '—',
                 f"{i['first_name']} {i['last_name']}",
             ))

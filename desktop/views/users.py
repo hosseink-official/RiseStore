@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from desktop.db import get_all_users, get_user, create_user, update_user, delete_user
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_date, persian_digits
+from desktop.utils import format_date, persian_digits, clean_number
 
 
 class UsersView:
@@ -194,7 +194,7 @@ class UsersView:
         values = self.tree.item(item, 'values')
         if not values:
             return
-        uid = int(values[-1])
+        uid = int(clean_number(values[-1]))
         menu = tk.Menu(self.frame, tearoff=0, font=get_font(9),
                        bg=Colors.card, fg=Colors.text_primary,
                        activebackground=Colors.accent, activeforeground='#ffffff')
@@ -208,4 +208,4 @@ class UsersView:
             return
         values = self.tree.item(item, 'values')
         if values:
-            self._edit_user(int(values[-1]))
+            self._edit_user(int(clean_number(values[-1])))

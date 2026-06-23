@@ -63,7 +63,7 @@ class SalesListView:
             var.trace('w', lambda *_: self._load())
             self.filter_vars[key] = var
             w = ttk.Combobox(f, textvariable=var, values=values,
-                             state='normal', font=get_font(9), width=max(1, width // 8))
+                             state='readonly', font=get_font(9), width=max(1, width // 8))
             w.pack(ipady=1)
             self._filter_combos[key] = w
 
@@ -406,9 +406,16 @@ class SaleForm:
         prod_scroll.pack(side='left', fill='y')
 
         def _on_mousewheel(event):
-            prod_canvas.yview_scroll(-1 * (event.delta // 120), 'units')
+            if event.num == 4:
+                prod_canvas.yview_scroll(-1, 'units')
+            elif event.num == 5:
+                prod_canvas.yview_scroll(1, 'units')
+            else:
+                prod_canvas.yview_scroll(-1 * (event.delta // 120), 'units')
         prod_canvas.bind('<Enter>', lambda e: prod_canvas.bind_all('<MouseWheel>', _on_mousewheel))
         prod_canvas.bind('<Leave>', lambda e: prod_canvas.unbind_all('<MouseWheel>'))
+        prod_canvas.bind('<Button-4>', _on_mousewheel)
+        prod_canvas.bind('<Button-5>', _on_mousewheel)
 
         for p in get_all_products()[:30]:
             u = p.get('unit') or ''
@@ -740,13 +747,16 @@ class SaleDetailView:
 
     def _bind_mousewheel(self, canvas):
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
-        def _on_enter(event):
-            canvas.bind_all('<MouseWheel>', _on_mousewheel)
-        def _on_leave(event):
-            canvas.unbind_all('<MouseWheel>')
-        canvas.bind('<Enter>', _on_enter)
-        canvas.bind('<Leave>', _on_leave)
+            if event.num == 4:
+                canvas.yview_scroll(-1, 'units')
+            elif event.num == 5:
+                canvas.yview_scroll(1, 'units')
+            else:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_mousewheel))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        canvas.bind('<Button-4>', _on_mousewheel)
+        canvas.bind('<Button-5>', _on_mousewheel)
 
     def _build(self, sale):
         sale_id = self._sale_id
@@ -962,7 +972,10 @@ class SaleDetailView:
         if not sale:
             return
         if messagebox.askyesno('تأیید حذف', 'آیا از حذف این فروش اطمینان دارید؟'):
-            from desktop.db import execute as db_exe
+            from desktop.db import execute as db_exe, fetchall
+            items = fetchall("SELECT * FROM store_saleitem WHERE sale_id=?", [sale_id])
+            for item in items:
+                db_exe("UPDATE store_product SET stock=stock+? WHERE id=?", [item['quantity'], item['product_id']])
             db_exe("DELETE FROM store_saleitem WHERE sale_id=?", [sale_id])
             db_exe("DELETE FROM store_payment WHERE sale_id=?", [sale_id])
             db_exe("DELETE FROM store_installment WHERE sale_id=?", [sale_id])

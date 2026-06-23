@@ -241,7 +241,7 @@ def create_user(data):
     pw = make_password(data['password'])
     return execute(
         "INSERT INTO auth_user (password, username, first_name, last_name, email, is_staff, is_active, date_joined) VALUES (?,?,?,?,?,?,?,datetime('now'))",
-        [pw, data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 1]
+        [pw, data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 0]
     )
 
 def update_user(uid, data):
@@ -250,7 +250,7 @@ def update_user(uid, data):
         execute("UPDATE auth_user SET password=? WHERE id=?", [pw, uid])
     execute(
         "UPDATE auth_user SET username=?, first_name=?, last_name=?, email=?, is_staff=?, is_active=? WHERE id=?",
-        [data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 1, uid]
+        [data['username'], data.get('first_name',''), data.get('last_name',''), data.get('email',''), 1 if data.get('is_staff') else 0, 1 if data.get('is_active') else 0, uid]
     )
 
 def delete_user(uid):
@@ -448,19 +448,21 @@ def get_installments(sale_id, customer_id):
 def get_installment(iid):
     return fetchone("SELECT * FROM store_installment WHERE id=?", [iid])
 
-def create_installment(sale_id, customer_id, total_amount, due_days=1):
+def create_installment(sale_id, customer_id, total_amount, count=6, due_day=1):
+    per_term = max(1, total_amount // count)
     return execute(
-        "INSERT INTO store_installment (sale_id, customer_id, total_count, paid_count, amount_per_term, due_day, status, start_date) VALUES (?,?,6,0,?,?,'active',date('now'))",
-        [sale_id, customer_id, max(1, total_amount // 6), due_days]
+        "INSERT INTO store_installment (sale_id, customer_id, total_count, paid_count, amount_per_term, due_day, status, start_date, amount_paid) VALUES (?,?,?,0,?,?,'active',date('now'),0)",
+        [sale_id, customer_id, count, per_term, due_day]
     )
 
-def update_installment(iid, paid_count, amount_paid):
+def update_installment(iid, amount_paid):
     inst = get_installment(iid)
     if not inst:
         return
-    new_paid = paid_count + 1
+    new_paid = inst['paid_count'] + 1
+    new_amount_paid = (inst['amount_paid'] or 0) + amount_paid
     new_status = 'paid' if new_paid >= inst['total_count'] else 'active'
-    execute("UPDATE store_installment SET paid_count=?, amount_paid=?, status=? WHERE id=?", [new_paid, amount_paid, new_status, iid])
+    execute("UPDATE store_installment SET paid_count=?, amount_paid=?, status=? WHERE id=?", [new_paid, new_amount_paid, new_status, iid])
 
 def update_sale_status(sid):
     sale = get_sale(sid)
@@ -503,13 +505,13 @@ def get_debtors():
     """)
 
 def best_selling(limit=10):
-    return fetchall(f"""
+    return fetchall("""
         SELECT si.product_id, p.name, SUM(si.quantity) as qty, SUM(si.subtotal) as rev
         FROM store_saleitem si
         JOIN store_product p ON p.id=si.product_id
         GROUP BY si.product_id
-        ORDER BY qty DESC LIMIT {limit}
-    """)
+        ORDER BY qty DESC LIMIT ?
+    """, [limit])
 
 def yearly_sales(year):
     return fetchall("""

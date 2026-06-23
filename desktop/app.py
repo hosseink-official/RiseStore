@@ -127,8 +127,9 @@ class App:
             btn.configure(bg=Colors.primary, fg=Colors.sidebar_text)
             indicator.configure(bg=Colors.primary)
 
-        btn, indicator = self.nav_buttons.get(key)
-        if btn:
+        nav = self.nav_buttons.get(key)
+        if nav:
+            btn, indicator = nav
             btn.configure(bg=Colors.primary_light, fg=Colors.sidebar_text_hover)
             indicator.configure(bg=Colors.accent)
 

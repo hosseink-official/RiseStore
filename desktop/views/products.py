@@ -149,7 +149,7 @@ class ProductTypesView:
         values = self.tree.item(item, 'values')
         if not values:
             return
-        tid = int(values[-1])
+        tid = int(clean_number(values[-1]))
         menu = tk.Menu(self.frame, tearoff=0, font=get_font(9),
                        bg=Colors.card, fg=Colors.text_primary,
                        activebackground=Colors.accent, activeforeground='#ffffff')
@@ -163,7 +163,7 @@ class ProductTypesView:
             return
         values = self.tree.item(item, 'values')
         if values:
-            self._edit(int(values[-1]))
+            self._edit(int(clean_number(values[-1])))
 
     def _add(self):
         fields = [('نام', 'name', 'text'), ('توضیحات', 'description', 'textarea')]
@@ -261,7 +261,7 @@ class ProductsView:
         values = self.tree.item(item, 'values')
         if not values:
             return
-        pid = int(values[-1])
+        pid = int(clean_number(values[-1]))
         menu = tk.Menu(self.frame, tearoff=0, font=get_font(9),
                        bg=Colors.card, fg=Colors.text_primary,
                        activebackground=Colors.accent, activeforeground='#ffffff')
@@ -275,7 +275,7 @@ class ProductsView:
             return
         values = self.tree.item(item, 'values')
         if values:
-            self._edit(int(values[-1]))
+            self._edit(int(clean_number(values[-1])))
 
     def _add(self):
         types = get_product_types()
@@ -677,10 +677,10 @@ class ProductsView:
                              command=lambda: self._delete_price(price_id, tree))
             menu.post(event.x_root, event.y_root)
 
-        self._delete_price = lambda price_id, tree: (
-            messagebox.askyesno('تأیید', 'حذف شود؟') and
-            delete_product_price(price_id) and
-            load_prices()
-        )
+        def _delete_price(price_id, tree):
+            if messagebox.askyesno('تأیید', 'حذف شود؟'):
+                delete_product_price(price_id)
+                load_prices()
+        self._delete_price = _delete_price
 
         prod_var.trace('w', load_prices)

@@ -25,9 +25,16 @@ class DashboardView:
         scrollbar.pack(side='left', fill='y')
 
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+            if event.num == 4:
+                canvas.yview_scroll(-1, 'units')
+            elif event.num == 5:
+                canvas.yview_scroll(1, 'units')
+            else:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
         canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_mousewheel))
         canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        canvas.bind('<Button-4>', _on_mousewheel)
+        canvas.bind('<Button-5>', _on_mousewheel)
 
         self._build()
 
@@ -98,8 +105,7 @@ class DashboardView:
 
         d = today_str()
         ms = month_start()
-        now = datetime.now()
-        year = now.year
+        year = datetime.now().year
 
         today_sales = daily_sales(d)
         month_sales = monthly_sales(ms)
@@ -130,7 +136,7 @@ class DashboardView:
         best = best_selling(5)
 
         yearly = yearly_sales(year)
-        month_labels = ['فر', 'ار', 'خ', 'ت', 'م', 'ش', 'م', 'آ', 'آ', 'د', 'ب', 'اس']
+        month_labels = ['ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن', 'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر']
         month_data = []
         for r in yearly:
             m = int(r['month'])

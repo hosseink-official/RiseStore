@@ -39,7 +39,7 @@ def _install_bundled_fonts():
         subprocess.run(['fc-cache', '-f'], capture_output=True, timeout=30)
 
 
-def find_persian_font():
+def find_persian_font(root=None):
     global PERSIAN_FONT
     if PERSIAN_FONT:
         return PERSIAN_FONT
@@ -49,10 +49,13 @@ def find_persian_font():
     try:
         import tkinter as tk
         from tkinter import font as tkfont
-        root = tk.Tk()
-        root.withdraw()
-        available = set(tkfont.families())
-        root.destroy()
+        if root is None:
+            temp = tk.Tk()
+            temp.withdraw()
+            available = set(tkfont.families())
+            temp.destroy()
+        else:
+            available = set(tkfont.families(root))
     except Exception:
         available = set()
 

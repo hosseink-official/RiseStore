@@ -26,16 +26,16 @@ class AppearanceView:
         scrollbar.pack(side='left', fill='y')
 
         def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
-
-        def _on_enter(event):
-            canvas.bind_all('<MouseWheel>', _on_mousewheel)
-
-        def _on_leave(event):
-            canvas.unbind_all('<MouseWheel>')
-
-        canvas.bind('<Enter>', _on_enter)
-        canvas.bind('<Leave>', _on_leave)
+            if event.num == 4:
+                canvas.yview_scroll(-1, 'units')
+            elif event.num == 5:
+                canvas.yview_scroll(1, 'units')
+            else:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        canvas.bind('<Enter>', lambda e: canvas.bind_all('<MouseWheel>', _on_mousewheel))
+        canvas.bind('<Leave>', lambda e: canvas.unbind_all('<MouseWheel>'))
+        canvas.bind('<Button-4>', _on_mousewheel)
+        canvas.bind('<Button-5>', _on_mousewheel)
 
         frame = scroll_frame
 
@@ -75,12 +75,15 @@ class AppearanceView:
         font_var = tk.StringVar(value=self.settings.get('font_family') or '')
 
         try:
-            temp_root = tk.Tk()
-            temp_root.withdraw()
-            available = sorted(tkfont.families())
-            temp_root.destroy()
+            available = sorted(tkfont.families(self.app.root))
         except Exception:
-            available = FONT_CANDIDATES
+            try:
+                temp_root = tk.Tk()
+                temp_root.withdraw()
+                available = sorted(tkfont.families())
+                temp_root.destroy()
+            except Exception:
+                available = FONT_CANDIDATES
 
         persian_candidates = [f for f in available if any(
             kw in f.lower() for kw in ['vazir', 'tahoma', 'noto', 'sans', 'farsi',
@@ -269,7 +272,6 @@ class AppearanceView:
             save_settings(self.settings)
             load_theme()
             apply_theme(self.app.root)
-            self.frame.master.destroy()
             self.app._show_main()
 
         tk.Button(apply_btn_frame, text='✅  اعمال تغییرات', font=get_font(10),

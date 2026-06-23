@@ -72,9 +72,7 @@ def draw_bar_chart(canvas, data, x0, y0, x1, y1, title='', bar_color='#6366f1',
         canvas.create_text(x + bar_w / 2, chart_y1 + 8, text=label_text,
                            fill='#475569', font=('TkDefaultFont', 7), anchor='n')
 
-    canvas.create_text(x0 + pad_left / 2, (chart_y0 + chart_y1) / 2,
-                       text=title, fill='#94a3b8', font=('TkDefaultFont', 7),
-                       anchor='c', angle=90)
+
 
 
 def draw_pie_chart(canvas, data, cx, cy, radius, title='', hole_r=0):
