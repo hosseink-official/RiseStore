@@ -4,6 +4,11 @@ import base64
 import os
 from contextlib import contextmanager
 from datetime import datetime, date
+import jdatetime
+
+_PERSIAN_DIGITS = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
+def persian_digits(s: str | int) -> str:
+    return str(s).translate(_PERSIAN_DIGITS)
 
 DB_PATH = None
 
@@ -149,6 +154,12 @@ def _ensure_database():
             pass
 
         try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_customer_phone ON store_customer(phone)")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
             cur = conn.execute("PRAGMA table_info(store_saleitem)")
             col_types = {row[1]: row[2] for row in cur.fetchall()}
             if col_types.get('quantity') == 'INTEGER':
@@ -286,16 +297,32 @@ def get_all_customers(search=None):
         return fetchall("SELECT * FROM store_customer WHERE first_name LIKE ? OR last_name LIKE ? OR phone LIKE ? ORDER BY created_at DESC", [s, s, s])
     return fetchall("SELECT * FROM store_customer ORDER BY created_at DESC")
 
+class DuplicatePhoneError(Exception):
+    pass
+
+def get_customer_by_phone(phone):
+    return fetchone("SELECT id FROM store_customer WHERE phone=?", [phone])
+
 def create_customer(data):
+    phone = data.get('phone', '')
+    if phone:
+        dup = get_customer_by_phone(phone)
+        if dup:
+            raise DuplicatePhoneError(f'شماره تماس {persian_digits(phone)} قبلاً ثبت شده است')
     return execute(
         "INSERT INTO store_customer (first_name, last_name, phone, national_id, address, created_by_id, created_at, updated_at) VALUES (?,?,?,?,?,1,datetime('now'),datetime('now'))",
-        [data.get('first_name',''), data.get('last_name',''), data.get('phone',''), data.get('national_id',''), data.get('address','')]
+        [data.get('first_name',''), data.get('last_name',''), phone, data.get('national_id',''), data.get('address','')]
     )
 
 def update_customer(cid, data):
+    phone = data.get('phone', '')
+    if phone:
+        dup = get_customer_by_phone(phone)
+        if dup and dup['id'] != cid:
+            raise DuplicatePhoneError(f'شماره تماس {persian_digits(phone)} قبلاً ثبت شده است')
     execute(
         "UPDATE store_customer SET first_name=?, last_name=?, phone=?, national_id=?, address=?, updated_at=datetime('now') WHERE id=?",
-        [data.get('first_name',''), data.get('last_name',''), data.get('phone',''), data.get('national_id',''), data.get('address',''), cid]
+        [data.get('first_name',''), data.get('last_name',''), phone, data.get('national_id',''), data.get('address',''), cid]
     )
 
 def delete_customer(cid):
@@ -371,15 +398,27 @@ def get_product(tid):
     return fetchone("SELECT * FROM store_product WHERE id=?", [tid])
 
 def get_all_products():
-    return fetchall(
-        "SELECT p.*, pt.name as product_type_name FROM store_product p LEFT JOIN store_producttype pt ON pt.id=p.product_type_id ORDER BY p.name"
-    )
+    return fetchall("""
+        SELECT p.*, pt.name as product_type_name,
+               (p.stock + COALESCE(pp.total_stock, 0)) as total_stock
+        FROM store_product p
+        LEFT JOIN store_producttype pt ON pt.id=p.product_type_id
+        LEFT JOIN (
+            SELECT product_id, SUM(stock) as total_stock
+            FROM store_product_price
+            GROUP BY product_id
+        ) pp ON pp.product_id=p.id
+        ORDER BY p.name
+    """)
 
 def create_product(data):
     return execute(
         "INSERT INTO store_product (name, product_type_id, unit, purchase_price, selling_price, stock, description, created_at, updated_at) VALUES (?,?,?,?,?,?,?,datetime('now'),datetime('now'))",
         [data['name'], data.get('product_type_id'), data.get('unit',''), int(data.get('purchase_price',0) or 0), int(data.get('selling_price',0) or 0), int(data.get('stock',0) or 0), data.get('description','')]
     )
+
+def add_product_stock(pid, qty):
+    execute("UPDATE store_product SET stock=stock+?, updated_at=datetime('now') WHERE id=?", [qty, pid])
 
 def update_product(tid, data):
     execute(
@@ -611,6 +650,45 @@ def yearly_sales(year):
         ORDER BY month
     """, [str(year)])
 
+def yearly_sales_jalali(jyear):
+    g_start = jdatetime.JalaliToGregorian(jyear, 1, 1).getGregorianList()
+    g_end = jdatetime.JalaliToGregorian(jyear + 1, 1, 1).getGregorianList()
+    from datetime import timedelta
+    end_date = date(g_end[0], g_end[1], g_end[2]) - timedelta(days=1)
+
+    start_str = f"{g_start[0]:04d}-{g_start[1]:02d}-{g_start[2]:02d}"
+    end_str = end_date.isoformat()
+
+    rows = fetchall("""
+        SELECT sale_date, total_amount, payment_type
+        FROM store_sale
+        WHERE sale_date >= ? AND sale_date <= ? AND status != 'cancelled'
+        ORDER BY sale_date
+    """, [start_str, end_str])
+
+    months_data = {}
+    for r in rows:
+        d = date.fromisoformat(r['sale_date'][:10])
+        jd = jdatetime.date.fromgregorian(date=d)
+        m = jd.month
+        if m not in months_data:
+            months_data[m] = {
+                'month': f'{m:02d}',
+                'sale_count': 0,
+                'total': 0,
+                'cash_total': 0,
+                'inst_total': 0
+            }
+        months_data[m]['sale_count'] += 1
+        months_data[m]['total'] += r['total_amount'] or 0
+        if r['payment_type'] == 'cash':
+            months_data[m]['cash_total'] += r['total_amount'] or 0
+        elif r['payment_type'] == 'installment':
+            months_data[m]['inst_total'] += r['total_amount'] or 0
+
+    return [months_data[m] for m in range(1, 13) if m in months_data]
+
+
 def yearly_cost(year):
     rows = fetchall("""
         SELECT si.quantity, p.purchase_price
@@ -661,15 +739,35 @@ def installment_report():
         JOIN store_customer c ON c.id=i.customer_id
         JOIN store_sale s ON s.id=i.sale_id
         LEFT JOIN auth_user u ON u.id=s.created_by_id
-        WHERE i.status='active' AND (s.total_amount - COALESCE((SELECT SUM(amount) FROM store_payment WHERE sale_id=s.id), 0)) > 0
+        WHERE i.status IN ('active', 'paid')
         ORDER BY i.status, i.start_date DESC
+    """)
+
+def get_all_products_total_stock():
+    return fetchall("""
+        SELECT p.*, COALESCE(pt.name,'') as product_type_name,
+               (p.stock + COALESCE(pp.total_stock, 0)) as total_stock
+        FROM store_product p
+        LEFT JOIN store_producttype pt ON pt.id=p.product_type_id
+        LEFT JOIN (
+            SELECT product_id, SUM(stock) as total_stock
+            FROM store_product_price
+            GROUP BY product_id
+        ) pp ON pp.product_id=p.id
+        ORDER BY p.name
     """)
 
 def low_stock_products(threshold=5):
     return fetchall("""
-        SELECT p.*, COALESCE(pt.name,'') as product_type_name
+        SELECT p.*, COALESCE(pt.name,'') as product_type_name,
+               (p.stock + COALESCE(pp.total_stock, 0)) as total_stock
         FROM store_product p
         LEFT JOIN store_producttype pt ON pt.id=p.product_type_id
-        WHERE p.stock<=?
-        ORDER BY p.stock ASC, p.name
+        LEFT JOIN (
+            SELECT product_id, SUM(stock) as total_stock
+            FROM store_product_price
+            GROUP BY product_id
+        ) pp ON pp.product_id=p.id
+        WHERE (p.stock + COALESCE(pp.total_stock, 0)) <= ?
+        ORDER BY (p.stock + COALESCE(pp.total_stock, 0)) ASC, p.name
     """, [threshold])

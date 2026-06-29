@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type, get_product_prices, create_product_price, update_product_price, delete_product_price, create_supply_entry, get_supply_log
+from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, add_product_stock, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type, get_product_prices, create_product_price, update_product_price, delete_product_price, create_supply_entry, get_supply_log
 from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import persian_digits, format_number, format_date, add_number_comma_formatting, clean_number, make_dialog
 
@@ -12,7 +12,7 @@ def _make_button(parent, text, bg, active_bg, command):
                      command=command)
 
 
-def _make_form_dialog(parent, title, fields, obj=None, on_save=None, combobox_data=None, on_delete=None):
+def _make_form_dialog(parent, title, fields, obj=None, on_save=None, combobox_data=None, on_delete=None, label_values=None):
     win = make_dialog(parent, title, 520, 480)
     win.configure(bg=Colors.card)
     win.resizable(False, False)
@@ -34,6 +34,16 @@ def _make_form_dialog(parent, title, fields, obj=None, on_save=None, combobox_da
                  fg=Colors.text_secondary, width=14, anchor='e').pack(side='right')
 
         var = tk.StringVar()
+
+        if widget_type == 'label':
+            val = label_values.get(key) if label_values else None
+            if val is None:
+                val = obj[key] if obj and key in obj else ''
+            w = tk.Label(row, text=val, font=get_font(10),
+                         bg=Colors.card, fg=Colors.text_primary, anchor='e')
+            w.pack(side='right', fill='x', expand=True, padx=(10, 0))
+            entries[key] = (None, w)
+            continue
 
         if widget_type == 'combobox':
             items = combobox_data.get(key, []) if combobox_data else []
@@ -74,6 +84,8 @@ def _make_form_dialog(parent, title, fields, obj=None, on_save=None, combobox_da
         if on_save:
             data = {}
             for key, (var, w) in entries.items():
+                if var is None:
+                    continue
                 val = clean_number(var.get()) if hasattr(var, 'get') else w.get('1.0', 'end-1c').strip()
                 data[key] = val
             on_save(data)
@@ -209,21 +221,25 @@ class ProductsView:
                               highlightbackground=Colors.border, highlightthickness=1)
         table_card.pack(fill='both', expand=True)
 
-        columns = ('stock', 'cost', 'price', 'unit', 'type', 'name', 'id')
+        columns = ('in_stock', 'qty', 'cost', 'price', 'unit', 'type', 'date', 'name', 'id')
         self.tree = ttk.Treeview(table_card, columns=columns,
                                  show='headings', height=20)
-        self.tree.heading('stock', text='موجودی', anchor='center')
+        self.tree.heading('in_stock', text='موجودی', anchor='center')
+        self.tree.heading('qty', text='مقدار', anchor='center')
         self.tree.heading('cost', text='قیمت خرید', anchor='center')
         self.tree.heading('price', text='قیمت فروش', anchor='center')
         self.tree.heading('unit', text='واحد', anchor='center')
         self.tree.heading('type', text='نوع', anchor='e')
+        self.tree.heading('date', text='تاریخ تعریف', anchor='center')
         self.tree.heading('name', text='نام محصول', anchor='e')
         self.tree.heading('id', text='#', anchor='center')
-        self.tree.column('stock', width=80, anchor='center')
+        self.tree.column('in_stock', width=80, anchor='center')
+        self.tree.column('qty', width=80, anchor='center')
         self.tree.column('cost', width=120, anchor='center')
         self.tree.column('price', width=120, anchor='center')
         self.tree.column('unit', width=70, anchor='center')
         self.tree.column('type', width=120, anchor='e')
+        self.tree.column('date', width=100, anchor='center')
         self.tree.column('name', width=200, anchor='e')
         self.tree.column('id', width=50, anchor='center')
 
@@ -243,11 +259,13 @@ class ProductsView:
             self.tree.delete(item)
         for p in get_all_products():
             self.tree.insert('', 'end', values=(
+                persian_digits(p['total_stock']),
                 persian_digits(p['stock']),
                 format_number(p['purchase_price']),
                 format_number(p['selling_price']),
                 p.get('unit') or '',
                 p.get('product_type_name') or '—',
+                format_date(p['created_at']),
                 p['name'],
                 persian_digits(p['id']),
             ))
@@ -313,11 +331,13 @@ class ProductsView:
                   ('قیمت فروش', 'selling_price', 'number'),
                   ('قیمت خرید', 'purchase_price', 'number'),
                   ('موجودی', 'stock', 'number'),
+                  ('تاریخ تعریف', 'created_at', 'label'),
                   ('توضیحات', 'description', 'textarea')]
         _make_form_dialog(self.frame, 'ویرایش محصول', fields, obj=p,
                           on_save=lambda d: self._save_edit(pid, d),
                           combobox_data={'product_type_id': type_items,
                                          'unit': unit_items},
+                          label_values={'created_at': format_date(p['created_at'])},
                           on_delete=lambda: self._delete(pid))
 
     def _save_edit(self, pid, data):
@@ -341,6 +361,7 @@ class ProductsView:
             return
         win = make_dialog(self.frame, 'مدیریت قیمت‌های محصول', 700, 600)
         win.configure(bg=Colors.bg)
+        win.grab_set()
 
         main = tk.Frame(win, bg=Colors.bg, padx=20, pady=16)
         main.pack(fill='both', expand=True)
@@ -462,7 +483,7 @@ class ProductsView:
                 ('عنوان:', 'label', ''),
                 ('قیمت خرید:', 'buy_price', '0'),
                 ('قیمت فروش:', 'sell_price', ''),
-                ('تعداد:', 'stock', '0'),
+                ('موجودی:', 'stock', '0'),
                 ('تاریخ:', 'date', default_date),
             ]
 
@@ -474,6 +495,7 @@ class ProductsView:
                 buy = int(data.get('buy_price') or 0)
                 price_id = create_product_price(pid, data['label'], sell, qty)
                 if qty > 0:
+                    add_product_stock(pid, qty)
                     try:
                         from jdatetime import date as jdate
                         from datetime import datetime
@@ -581,6 +603,7 @@ class ProductsView:
                 if qty < 1 or sell < 1:
                     return
                 update_product_price(price_id, label, sell, stock + qty)
+                add_product_stock(pid, qty)
                 create_supply_entry(price_id, qty, buy, sell)
                 fwin.destroy()
                 load_prices()
@@ -673,3 +696,5 @@ class ProductsView:
         self._delete_price = _delete_price
 
         prod_var.trace('w', load_prices)
+        win.wait_window()
+        self._load()

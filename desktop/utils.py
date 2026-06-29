@@ -79,7 +79,7 @@ def format_datetime(d: datetime | str | None) -> str:
 
 
 def to_gregorian_iso(jy: int, jm: int, jd: int) -> str:
-    g = jdatetime.jalali_to_gregorian(jy, jm, jd)
+    g = jdatetime.JalaliToGregorian(jy, jm, jd).getGregorianList()
     return f'{g[0]:04d}-{g[1]:02d}-{g[2]:02d}'
 
 
@@ -131,10 +131,7 @@ def _ask_number(title, prompt, minvalue, maxvalue, parent, is_float):
                             bg=Colors.card, fg=Colors.text_primary)
     prompt_label.pack(anchor='e', pady=(0, 4))
 
-    if is_float:
-        range_text = f'حداقل: {persian_digits(str(minvalue))}  —  حداکثر: {persian_digits(str(maxvalue))}'
-    else:
-        range_text = f'حداقل: {persian_digits(f"{minvalue:,}")}  —  حداکثر: {persian_digits(f"{maxvalue:,}")}'
+    range_text = f'حداقل: {persian_digits(f"{minvalue:,}")}  —  حداکثر: {persian_digits(f"{maxvalue:,}")}'
     tk.Label(body, text=range_text,
              font=('TkDefaultFont', 8), bg=Colors.card, fg=Colors.text_muted).pack(anchor='e', pady=(0, 8))
 
@@ -145,8 +142,7 @@ def _ask_number(title, prompt, minvalue, maxvalue, parent, is_float):
                      justify='center')
     entry.pack(fill='x', ipady=6, pady=(0, 4))
     entry.focus_set()
-    if not is_float:
-        add_number_comma_formatting(var, entry)
+    add_number_comma_formatting(var, entry)
 
     warn_label = tk.Label(body, text='', font=('TkDefaultFont', 9),
                           bg=Colors.card, fg=Colors.danger)
@@ -205,7 +201,11 @@ def add_number_comma_formatting(var, entry=None):
             cursor_pos = entry.index(tk.INSERT) if entry else 0
             digits_before = len(''.join(c for c in value[:cursor_pos] if c.isdigit()))
             raw = clean_number(value)
-            formatted = persian_digits(f'{int(raw):,}')
+            if '.' in raw:
+                parts = raw.split('.')
+                formatted = persian_digits(f'{int(parts[0]):,}') + '.' + persian_digits(parts[1])
+            else:
+                formatted = persian_digits(f'{int(raw):,}')
             if formatted != value:
                 var.set(formatted)
                 if entry:

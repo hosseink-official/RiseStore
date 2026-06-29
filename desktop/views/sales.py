@@ -460,10 +460,10 @@ class SaleForm:
             return
         is_float = p.get('unit') in self._FLOAT_UNITS
         max_qty = min(float(avail), 9999) if is_float else min(avail, 9999)
-        qty = persian_askfloat('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
+        qty = persian_askfloat('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {format_number(avail)})',
                                minvalue=0.1 if is_float else 1, maxvalue=max_qty,
                                parent=self.frame.winfo_toplevel()) if is_float else \
-               persian_askinteger('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
+               persian_askinteger('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {format_number(avail)})',
                                   minvalue=1, maxvalue=max_qty,
                                   parent=self.frame.winfo_toplevel())
         if qty is None:

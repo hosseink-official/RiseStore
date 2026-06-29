@@ -1,10 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
-from desktop.db import fetchall, fetchone, daily_sales, monthly_sales, best_selling, get_debtors, today_str, month_start, get_overdue_sales, yearly_sales, yearly_cost, payment_method_summary, sales_by_category
+from desktop.db import fetchall, fetchone, daily_sales, monthly_sales, best_selling, get_debtors, today_str, month_start, get_overdue_sales, yearly_sales_jalali, yearly_cost, payment_method_summary, sales_by_category
 from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import format_number, format_date, persian_digits
 from desktop.charts import draw_bar_chart, draw_pie_chart, draw_hbar_chart
-from datetime import date, datetime
+from datetime import date
+import jdatetime
 
 
 class DashboardView:
@@ -18,7 +19,11 @@ class DashboardView:
         self.frame = tk.Frame(canvas, bg=Colors.bg)
 
         self.frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-        canvas.create_window((0, 0), window=self.frame, anchor='nw')
+        self._frame_win = canvas.create_window((0, 0), window=self.frame, anchor='nw')
+
+        def _resize_canvas(event):
+            canvas.itemconfig(self._frame_win, width=event.width)
+        canvas.bind('<Configure>', _resize_canvas)
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side='right', fill='both', expand=True)
@@ -105,7 +110,7 @@ class DashboardView:
 
         d = today_str()
         ms = month_start()
-        year = datetime.now().year
+        jy = jdatetime.date.today().year
 
         today_sales = daily_sales(d)
         month_sales = monthly_sales(ms)
@@ -135,8 +140,8 @@ class DashboardView:
 
         best = best_selling(5)
 
-        yearly = yearly_sales(year)
-        month_labels = ['ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن', 'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر']
+        yearly = yearly_sales_jalali(jy)
+        month_labels = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         month_data = []
         for r in yearly:
             m = int(r['month'])
@@ -247,7 +252,6 @@ class DashboardView:
         if overdue:
             for s in overdue[:10]:
                 due_date = date.fromisoformat(s['sale_date'][:10])
-                import jdatetime
                 from datetime import timedelta
                 due_j = jdatetime.date.fromgregorian(
                     date=due_date + timedelta(days=s['payment_due_days']))

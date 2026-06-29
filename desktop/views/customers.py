@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, get_customer_unpaid_sales, settle_customer_debt, fetchone
+from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, get_customer_unpaid_sales, settle_customer_debt, fetchone, DuplicatePhoneError
 from desktop.theme import Colors, get_font, get_bold_font
 from desktop.utils import format_number, format_date, validate_phone, make_dialog, clean_number, add_number_comma_formatting
 
@@ -161,10 +161,14 @@ class CustomersView:
             except ValueError as e:
                 messagebox.showwarning('خطا', str(e))
                 return
-            if customer:
-                update_customer(customer['id'], data)
-            else:
-                create_customer(data)
+            try:
+                if customer:
+                    update_customer(customer['id'], data)
+                else:
+                    create_customer(data)
+            except DuplicatePhoneError as e:
+                messagebox.showwarning('خطا', str(e))
+                return
             win.destroy()
             self._load_data()
 

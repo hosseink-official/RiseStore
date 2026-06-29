@@ -3,13 +3,14 @@ from tkinter import ttk, messagebox
 from desktop.db import (
     daily_sales, monthly_sales, get_debtors, best_selling,
     today_str, month_start, week_ago, fetchall, fetchone, get_all_customers,
-    yearly_sales, yearly_cost, sales_by_category, payment_method_summary,
+    yearly_sales_jalali, yearly_cost, sales_by_category, payment_method_summary,
     installment_report, low_stock_products
 )
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_number, format_date, make_dialog
+from desktop.utils import format_number, format_date, make_dialog, persian_digits
 from desktop.views.sales import SaleDetailView
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
+import jdatetime
 
 
 class ReportsView:
@@ -174,14 +175,14 @@ class ReportsView:
         ])
 
     def _yearly_report(self):
-        year = datetime.now().year
-        months = yearly_sales(year)
+        jy = jdatetime.date.today().year
+        months = yearly_sales_jalali(jy)
         cost = yearly_cost(year)
 
         total_sales = sum(r['total'] or 0 for r in months)
         total_count = sum(r['sale_count'] or 0 for r in months)
 
-        card = self._report_card(f'📊  گزارش سالانه - {year}')
+        card = self._report_card(f'📊  گزارش سالانه - {persian_digits(jy)}')
         grid = tk.Frame(card, bg=Colors.card)
         grid.pack(fill='x')
         self._make_cards(grid, [
@@ -210,8 +211,8 @@ class ReportsView:
         tree.pack(side='right', fill='both', expand=True)
         scrollbar.pack(side='left', fill='y')
 
-        month_names = ['', 'ژانویه', 'فوریه', 'مارس', 'آوریل', 'مه', 'ژوئن',
-                       'ژوئیه', 'اوت', 'سپتامبر', 'اکتبر', 'نوامبر', 'دسامبر']
+        month_names = ['', 'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+                       'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
         for r in months:
             m = int(r['month'])
             tree.insert('', 'end', values=(
@@ -508,12 +509,12 @@ class ReportsView:
     def _stock_report(self):
         card = self._report_card('📦  گزارش موجودی انبار')
 
-        from desktop.db import get_all_products
-        all_products = get_all_products()
-        low = [p for p in all_products if (p['stock'] or 0) <= 5]
-        out = [p for p in all_products if (p['stock'] or 0) == 0]
+        from desktop.db import get_all_products_total_stock
+        all_products = get_all_products_total_stock()
+        low = [p for p in all_products if (p['total_stock'] or 0) <= 5]
+        out = [p for p in all_products if (p['total_stock'] or 0) == 0]
         total_items = len(all_products)
-        total_stock = sum(p['stock'] or 0 for p in all_products)
+        total_stock = sum(p['total_stock'] or 0 for p in all_products)
 
         grid = tk.Frame(card, bg=Colors.card)
         grid.pack(fill='x')
@@ -530,16 +531,18 @@ class ReportsView:
                  font=get_bold_font(10), bg=Colors.card,
                  fg=Colors.danger).pack(anchor='e', padx=20, pady=(8, 4))
 
-        cols = ('price', 'unit', 'stock', 'category', 'name')
+        cols = ('price', 'unit', 'stock', 'date', 'category', 'name')
         tree = ttk.Treeview(tc, columns=cols, show='headings', height=12)
         tree.heading('price', text='قیمت فروش', anchor='center')
         tree.heading('unit', text='واحد', anchor='center')
         tree.heading('stock', text='موجودی', anchor='center')
+        tree.heading('date', text='تاریخ تعریف', anchor='center')
         tree.heading('category', text='دسته', anchor='e')
         tree.heading('name', text='محصول', anchor='e')
         tree.column('price', width=130, anchor='center')
         tree.column('unit', width=80, anchor='center')
         tree.column('stock', width=80, anchor='center')
+        tree.column('date', width=100, anchor='center')
         tree.column('category', width=160, anchor='e')
         tree.column('name', width=220, anchor='e')
 
@@ -552,7 +555,8 @@ class ReportsView:
             tree.insert('', 'end', values=(
                 format_number(p['selling_price']),
                 p.get('unit') or '—',
-                p['stock'],
+                persian_digits(p['total_stock']),
+                format_date(p['created_at']),
                 p.get('product_type_name') or '—',
                 p['name'],
             ))
