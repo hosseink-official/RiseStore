@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from desktop.db import get_all_users, get_user, create_user, update_user, delete_user
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_date, persian_digits, clean_number
+from desktop.utils import format_date, persian_digits, clean_number, make_dialog
 
 
 class UsersView:
@@ -83,9 +83,7 @@ class UsersView:
             self._show_user_form(u)
 
     def _show_user_form(self, user=None):
-        win = tk.Toplevel(self.frame)
-        win.title('ویرایش کاربر' if user else 'کاربر جدید')
-        win.geometry('480x500')
+        win = make_dialog(self.frame, 'ویرایش کاربر' if user else 'کاربر جدید', 480, 500)
         win.configure(bg=Colors.card)
         win.resizable(False, False)
 

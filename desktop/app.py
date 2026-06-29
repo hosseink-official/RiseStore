@@ -39,7 +39,7 @@ class App:
 
         header = tk.Frame(sidebar, bg=Colors.primary)
         header.pack(fill='x')
-        tk.Label(header, text='RiseStore', font=get_bold_font(16),
+        tk.Label(header, text='فروشگاه نعمتی', font=get_bold_font(16),
                  bg=Colors.primary, fg='#ffffff').pack(pady=(14, 0))
         tk.Label(header, text='سیستم مدیریت فروشگاه', font=get_font(8),
                  bg=Colors.primary, fg=Colors.sidebar_text).pack()

@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, fetchone
+from desktop.db import get_all_customers, get_customer, create_customer, update_customer, delete_customer, get_customer_sales, get_customer_payments, get_customer_unpaid_sales, settle_customer_debt, fetchone
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_number, format_date
+from desktop.utils import format_number, format_date, validate_phone, make_dialog, clean_number, add_number_comma_formatting
 
 
 class CustomersView:
@@ -122,9 +122,7 @@ class CustomersView:
             self._show_customer_form(c)
 
     def _show_customer_form(self, customer=None):
-        win = tk.Toplevel(self.frame)
-        win.title('ویرایش مشتری' if customer else 'مشتری جدید')
-        win.geometry('480x420')
+        win = make_dialog(self.frame, 'ویرایش مشتری' if customer else 'مشتری جدید', 480, 420)
         win.configure(bg=Colors.card)
         win.resizable(False, False)
 
@@ -158,6 +156,11 @@ class CustomersView:
 
         def save():
             data = {k: v.get().strip() for k, v in fields.items()}
+            try:
+                data['phone'] = validate_phone(data.get('phone', ''))
+            except ValueError as e:
+                messagebox.showwarning('خطا', str(e))
+                return
             if customer:
                 update_customer(customer['id'], data)
             else:
@@ -208,9 +211,7 @@ class CustomersView:
         if not c:
             return
 
-        win = tk.Toplevel(self.frame)
-        win.title(f"{c['first_name']} {c['last_name']}")
-        win.geometry('820x620')
+        win = make_dialog(self.frame, f"{c['first_name']} {c['last_name']}", 820, 620)
         win.configure(bg=Colors.bg)
 
         main = tk.Frame(win, bg=Colors.bg, padx=24, pady=20)
@@ -229,6 +230,10 @@ class CustomersView:
                   bg=Colors.accent, fg='#ffffff', bd=0, cursor='hand2',
                   padx=10, pady=4, activebackground=Colors.accent_hover,
                   command=lambda: self._edit_customer(c['id'])).pack(side='left', padx=(0, 6))
+        tk.Button(name_frame, text='💰  تسویه حساب یکجا', font=get_font(9),
+                  bg=Colors.success, fg='#ffffff', bd=0, cursor='hand2',
+                  padx=10, pady=4, activebackground=Colors.success_hover,
+                  command=lambda: self._settle_account(c['id'])).pack(side='left', padx=(0, 6))
         tk.Button(name_frame, text='🗑️  حذف', font=get_font(9),
                   bg=Colors.danger, fg='#ffffff', bd=0, cursor='hand2',
                   padx=10, pady=4, activebackground=Colors.danger,
@@ -308,3 +313,103 @@ class CustomersView:
         else:
             tk.Label(main, text='هیچ پرداختی وجود ندارد', font=get_font(9),
                      bg=Colors.bg, fg=Colors.text_muted).pack(pady=10)
+
+    def _settle_account(self, customer_id):
+        c = get_customer(customer_id)
+        if not c:
+            return
+
+        unpaid = get_customer_unpaid_sales(customer_id)
+        if not unpaid:
+            messagebox.showinfo('', 'این مشتری بدهی ندارد')
+            return
+
+        total_debt = sum(s['remaining'] for s in unpaid)
+
+        win = make_dialog(self.frame,
+                          f"تسویه حساب {c['first_name']} {c['last_name']}", 560, 460)
+        win.configure(bg=Colors.card)
+        win.resizable(False, False)
+
+        header = tk.Frame(win, bg=Colors.success, height=48)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text='💰  تسویه حساب یکجا', font=get_bold_font(12),
+                 bg=Colors.success, fg='#ffffff').pack(expand=True)
+
+        main = tk.Frame(win, bg=Colors.card, padx=24, pady=16)
+        main.pack(fill='both', expand=True)
+
+        debt_row = tk.Frame(main, bg=Colors.card)
+        debt_row.pack(fill='x', pady=(0, 12))
+        tk.Label(debt_row, text='بدهی کل:', font=get_bold_font(11),
+                 bg=Colors.card, fg=Colors.text_primary).pack(side='right')
+        tk.Label(debt_row, text=format_number(total_debt), font=get_bold_font(14),
+                 bg=Colors.card, fg=Colors.danger).pack(side='right', padx=(8, 0))
+
+        sales_frame = tk.Frame(main, bg=Colors.card,
+                               highlightbackground=Colors.border, highlightthickness=1)
+        sales_frame.pack(fill='x', pady=(0, 12))
+        tk.Label(sales_frame, text='فاکتورهای تسویه نشده:', font=get_font(9),
+                 bg=Colors.card, fg=Colors.text_secondary).pack(anchor='e', padx=8, pady=(4, 2))
+        for s in unpaid:
+            row = tk.Frame(sales_frame, bg=Colors.card)
+            row.pack(fill='x', padx=8, pady=1)
+            tk.Label(row, text=format_number(s['remaining']), font=get_font(9),
+                     bg=Colors.card, fg=Colors.text_primary, width=14, anchor='e').pack(side='left')
+            tk.Label(row, text=f"#{s['id']}  {format_number(s['total_amount'])}",
+                     font=get_font(9), bg=Colors.card, fg=Colors.text_muted).pack(side='right')
+
+        amount_frame = tk.Frame(main, bg=Colors.card)
+        amount_frame.pack(fill='x', pady=(0, 8))
+        tk.Label(amount_frame, text='مبلغ پرداخت:', font=get_font(9),
+                 bg=Colors.card, fg=Colors.text_secondary, width=12, anchor='e').pack(side='right')
+        amount_var = tk.StringVar(value=format_number(total_debt))
+        amount_entry = tk.Entry(amount_frame, textvariable=amount_var, font=get_font(11),
+                 bd=1, relief='solid', bg=Colors.card,
+                 highlightbackground=Colors.border,
+                 highlightcolor=Colors.accent,
+                 highlightthickness=1, width=22)
+        amount_entry.pack(side='right', padx=(10, 0), ipady=4)
+        add_number_comma_formatting(amount_var, amount_entry)
+
+        notes_frame = tk.Frame(main, bg=Colors.card)
+        notes_frame.pack(fill='x', pady=(0, 14))
+        tk.Label(notes_frame, text='توضیحات:', font=get_font(9),
+                 bg=Colors.card, fg=Colors.text_secondary, width=12, anchor='e').pack(side='right')
+        notes_var = tk.StringVar()
+        tk.Entry(notes_frame, textvariable=notes_var,
+                 font=get_font(10), bd=1, relief='solid', bg=Colors.card,
+                 highlightbackground=Colors.border,
+                 highlightcolor=Colors.accent,
+                 highlightthickness=1).pack(side='right', padx=(10, 0), fill='x', expand=True, ipady=4)
+
+        def submit():
+            raw = amount_var.get().strip()
+            if not raw:
+                messagebox.showwarning('', 'مبلغ را وارد کنید')
+                return
+            try:
+                amount = int(clean_number(raw))
+            except ValueError:
+                messagebox.showwarning('', 'مبلغ نامعتبر است')
+                return
+            if amount <= 0:
+                messagebox.showwarning('', 'مبلغ باید بزرگتر از صفر باشد')
+                return
+
+            notes = notes_var.get().strip()
+            settle_customer_debt(customer_id, amount, notes)
+            messagebox.showinfo('', 'تسویه حساب با موفقیت انجام شد')
+            win.destroy()
+
+        btn_frame = tk.Frame(main, bg=Colors.card)
+        btn_frame.pack(fill='x')
+        tk.Button(btn_frame, text='✅  پرداخت و تسویه', font=get_font(10),
+                  bg=Colors.success, fg='#ffffff', bd=0, cursor='hand2',
+                  padx=20, pady=8, activebackground=Colors.success_hover,
+                  command=submit).pack(side='left')
+        tk.Button(btn_frame, text='✕  انصراف', font=get_font(10),
+                  bg=Colors.text_muted, fg='#ffffff', bd=0, cursor='hand2',
+                  padx=14, pady=8, activebackground=Colors.border,
+                  command=win.destroy).pack(side='left', padx=(8, 0))

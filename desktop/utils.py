@@ -1,3 +1,5 @@
+import tkinter as tk
+import re
 import jdatetime
 from datetime import datetime, date
 
@@ -11,6 +13,41 @@ def persian_digits(s: str | int) -> str:
 
 def clean_number(s: str) -> str:
     return s.translate(_ENGLISH_DIGITS).replace(',', '').strip()
+
+
+def make_dialog(parent, title, width, height):
+    root = parent.winfo_toplevel()
+    win = tk.Toplevel(root)
+    win.title(title)
+    win.geometry(f'{width}x{height}')
+    win.transient(root)
+    win.attributes('-topmost', True)
+    win.after(100, lambda: win.attributes('-topmost', False))
+
+    root.update_idletasks()
+    x = root.winfo_x() + (root.winfo_width() - width) // 2
+    y = root.winfo_y() + (root.winfo_height() - height) // 2
+    win.geometry(f'+{x}+{y}')
+    win._dx = x - root.winfo_x()
+    win._dy = y - root.winfo_y()
+
+    def _repos(*args):
+        try:
+            win.geometry(f'+{root.winfo_x() + win._dx}+{root.winfo_y() + win._dy}')
+        except tk.TclError:
+            pass
+
+    root.bind('<Configure>', _repos, add='+')
+    return win
+
+
+def validate_phone(phone: str) -> str:
+    phone = clean_number(phone)
+    phone = re.sub(r'[\s\-\(\)\+]', '', phone)
+    if phone:
+        if len(phone) != 11 or not phone.startswith('0'):
+            raise ValueError('شماره تماس باید ۱۱ رقمی و با ۰ شروع شود')
+    return phone
 
 
 def to_jalali(d: date | datetime | str | None) -> jdatetime.date | None:
@@ -62,16 +99,21 @@ def format_number(n: int | float | None) -> str:
 
 
 def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
+    return _ask_number(title, prompt, minvalue, maxvalue, parent, is_float=False)
+
+
+def persian_askfloat(title, prompt, minvalue=1, maxvalue=9999, parent=None):
+    return _ask_number(title, prompt, minvalue, maxvalue, parent, is_float=True)
+
+
+def _ask_number(title, prompt, minvalue, maxvalue, parent, is_float):
     import tkinter as tk
     from tkinter import ttk
     from desktop.theme import Colors
 
-    win = tk.Toplevel(parent)
-    win.title(title)
-    win.geometry('380x200')
+    win = make_dialog(parent, title, 380, 250)
     win.configure(bg=Colors.card)
     win.resizable(False, False)
-    win.transient(parent)
     win.grab_set()
 
     result = [None]
@@ -89,7 +131,11 @@ def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
                             bg=Colors.card, fg=Colors.text_primary)
     prompt_label.pack(anchor='e', pady=(0, 4))
 
-    tk.Label(body, text=f'حداقل: {persian_digits(f"{minvalue:,}")}  —  حداکثر: {persian_digits(f"{maxvalue:,}")}',
+    if is_float:
+        range_text = f'حداقل: {persian_digits(str(minvalue))}  —  حداکثر: {persian_digits(str(maxvalue))}'
+    else:
+        range_text = f'حداقل: {persian_digits(f"{minvalue:,}")}  —  حداکثر: {persian_digits(f"{maxvalue:,}")}'
+    tk.Label(body, text=range_text,
              font=('TkDefaultFont', 8), bg=Colors.card, fg=Colors.text_muted).pack(anchor='e', pady=(0, 8))
 
     var = tk.StringVar()
@@ -99,7 +145,8 @@ def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
                      justify='center')
     entry.pack(fill='x', ipady=6, pady=(0, 4))
     entry.focus_set()
-    add_number_comma_formatting(var, entry)
+    if not is_float:
+        add_number_comma_formatting(var, entry)
 
     warn_label = tk.Label(body, text='', font=('TkDefaultFont', 9),
                           bg=Colors.card, fg=Colors.danger)
@@ -107,7 +154,10 @@ def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
 
     def validate(val):
         if val > maxvalue:
-            warn_label.config(text=f'حداکثر مقدار مجاز: {persian_digits(f"{maxvalue:,}")}')
+            warn_label.config(text=f'حداکثر مقدار مجاز: {persian_digits(str(maxvalue))}')
+            return False
+        if val < minvalue:
+            warn_label.config(text=f'حداقل مقدار مجاز: {persian_digits(str(minvalue))}')
             return False
         warn_label.config(text='')
         return True
@@ -115,7 +165,7 @@ def persian_askinteger(title, prompt, minvalue=1, maxvalue=9999, parent=None):
     def submit():
         raw = clean_number(var.get())
         try:
-            val = int(raw)
+            val = float(raw) if is_float else int(raw)
         except ValueError:
             val = minvalue
         if not validate(val):

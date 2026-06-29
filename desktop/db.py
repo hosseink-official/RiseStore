@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS store_saleitem (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sale_id BIGINT NOT NULL REFERENCES store_sale(id),
     product_id BIGINT NOT NULL REFERENCES store_product(id),
-    quantity INTEGER NOT NULL,
+    quantity REAL NOT NULL,
     unit_price DECIMAL NOT NULL,
     subtotal DECIMAL NOT NULL
 );
@@ -145,6 +145,27 @@ def _ensure_database():
         try:
             conn.execute("ALTER TABLE store_product_price ADD COLUMN stock INTEGER NOT NULL DEFAULT 0")
             conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cur = conn.execute("PRAGMA table_info(store_saleitem)")
+            col_types = {row[1]: row[2] for row in cur.fetchall()}
+            if col_types.get('quantity') == 'INTEGER':
+                conn.executescript("""
+                    CREATE TABLE store_saleitem_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sale_id BIGINT NOT NULL REFERENCES store_sale(id),
+                        product_id BIGINT NOT NULL REFERENCES store_product(id),
+                        quantity REAL NOT NULL,
+                        unit_price DECIMAL NOT NULL,
+                        subtotal DECIMAL NOT NULL
+                    );
+                    INSERT INTO store_saleitem_new SELECT * FROM store_saleitem;
+                    DROP TABLE store_saleitem;
+                    ALTER TABLE store_saleitem_new RENAME TO store_saleitem;
+                """)
+                conn.commit()
         except sqlite3.OperationalError:
             pass
 
@@ -284,6 +305,67 @@ def customer_debt(cid):
     total = fetchone("SELECT COALESCE(SUM(total_amount),0) as s FROM store_sale WHERE customer_id=? AND status IN ('pending','partial')", [cid])
     paid = fetchone("SELECT COALESCE(SUM(amount),0) as s FROM store_payment WHERE customer_id=?", [cid])
     return max(0, (total['s'] or 0) - (paid['s'] or 0))
+
+def get_customer_unpaid_sales(cid):
+    sales = fetchall("""
+        SELECT s.*,
+               COALESCE((SELECT SUM(amount) FROM store_payment WHERE sale_id=s.id), 0) as paid_amount
+        FROM store_sale s
+        WHERE s.customer_id=? AND s.status IN ('pending','partial')
+        ORDER BY s.sale_date ASC, s.id ASC
+    """, [cid])
+    result = []
+    for s in sales:
+        remaining = (s['total_amount'] or 0) - (s['paid_amount'] or 0)
+        if remaining > 0:
+            s['remaining'] = remaining
+            result.append(s)
+    return result
+
+def settle_customer_debt(cid, total_amount, notes, received_by_id=1):
+    unpaid = get_customer_unpaid_sales(cid)
+    remaining_amount = total_amount
+    created_payments = []
+
+    conn = get_conn()
+    try:
+        for s in unpaid:
+            if remaining_amount <= 0:
+                break
+            pay_amount = min(remaining_amount, s['remaining'])
+            if pay_amount <= 0:
+                continue
+
+            cur = conn.execute(
+                "INSERT INTO store_payment (sale_id, customer_id, received_by_id, amount, payment_type, notes, payment_date) VALUES (?,?,?,?,?,?,datetime('now'))",
+                [s['id'], cid, received_by_id, pay_amount, 'cash', notes]
+            )
+            pid = cur.lastrowid
+            created_payments.append({'sale_id': s['id'], 'amount': pay_amount, 'payment_id': pid})
+            remaining_amount -= pay_amount
+
+            row = conn.execute(
+                "SELECT COALESCE(SUM(amount),0) as s FROM store_payment WHERE sale_id=?",
+                [s['id']]
+            ).fetchone()
+            total_paid = row[0]
+
+            if total_paid >= (s['total_amount'] or 0):
+                conn.execute("UPDATE store_sale SET status='paid' WHERE id=?", [s['id']])
+                inst_row = conn.execute("SELECT id, total_count FROM store_installment WHERE sale_id=? AND status='active'", [s['id']]).fetchone()
+                if inst_row:
+                    conn.execute("UPDATE store_installment SET paid_count=?, status='paid' WHERE id=?", [inst_row[1], inst_row[0]])
+            elif total_paid > 0:
+                conn.execute("UPDATE store_sale SET status='partial' WHERE id=?", [s['id']])
+
+        conn.commit()
+    except:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return created_payments
 
 def get_product(tid):
     return fetchone("SELECT * FROM store_product WHERE id=?", [tid])
@@ -472,6 +554,9 @@ def update_sale_status(sid):
     remaining = (sale['total_amount'] or 0) - paid
     if remaining <= 0:
         new_status = 'paid'
+        inst = fetchone("SELECT id, total_count FROM store_installment WHERE sale_id=? AND status='active'", [sid])
+        if inst:
+            execute("UPDATE store_installment SET paid_count=?, status='paid' WHERE id=?", [inst['total_count'], inst['id']])
     elif paid > 0:
         new_status = 'partial'
     else:
@@ -570,10 +655,13 @@ def installment_report():
     return fetchall("""
         SELECT i.*, c.first_name, c.last_name, c.phone,
                s.total_amount, s.sale_date,
+               COALESCE(NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), u.username) AS created_by_name,
                (SELECT MAX(payment_date) FROM store_payment WHERE installment_id=i.id) as last_payment_date
         FROM store_installment i
         JOIN store_customer c ON c.id=i.customer_id
         JOIN store_sale s ON s.id=i.sale_id
+        LEFT JOIN auth_user u ON u.id=s.created_by_id
+        WHERE i.status='active' AND (s.total_amount - COALESCE((SELECT SUM(amount) FROM store_payment WHERE sale_id=s.id), 0)) > 0
         ORDER BY i.status, i.start_date DESC
     """)
 

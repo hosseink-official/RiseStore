@@ -9,7 +9,7 @@ from desktop.db import (
     get_product_prices, get_installments, delete_payment, update_payment
 )
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_number, format_date, format_datetime, add_number_comma_formatting, clean_number, persian_askinteger, persian_digits
+from desktop.utils import format_number, format_date, format_datetime, add_number_comma_formatting, clean_number, persian_askinteger, persian_askfloat, persian_digits, validate_phone, make_dialog
 
 
 
@@ -169,9 +169,7 @@ class SalesListView:
             self._filter_combos[key]['values'] = ['', *vals]
 
     def _new_sale(self):
-        win = tk.Toplevel(self.frame)
-        win.title('ثبت فروش جدید')
-        win.geometry('850x650')
+        win = make_dialog(self.frame, 'ثبت فروش جدید', 850, 650)
         win.configure(bg=Colors.bg)
         SaleForm(win, self.app, on_save=lambda: (win.destroy(), self._load()))
 
@@ -181,9 +179,7 @@ class SalesListView:
             return
         values = self.tree.item(item, 'values')
         if values:
-            win = tk.Toplevel(self.frame)
-            win.title(f'فروش #{values[-1]}')
-            win.geometry('900x680')
+            win = make_dialog(self.frame, f'فروش #{values[-1]}', 900, 680)
             win.configure(bg=Colors.bg)
             SaleDetailView(win, int(values[-1]), self.app)
 
@@ -321,6 +317,11 @@ class SaleForm:
                     if not first_name:
                         messagebox.showwarning('', 'نام الزامی است')
                         return
+                    try:
+                        phone = validate_phone(phone)
+                    except ValueError as e:
+                        messagebox.showwarning('خطا', str(e))
+                        return
                     data = {'first_name': first_name, 'last_name': last_name, 'phone': phone}
                     create_customer(data)
                     customers = get_all_customers(phone or first_name)
@@ -443,6 +444,8 @@ class SaleForm:
         self._nav_buttons(back_cmd=self._build_step1,
                           next_text='مرحله بعد ➡', next_cmd=self._go_step3)
 
+    _FLOAT_UNITS = {'کیلوگرم', 'گرم', 'لیتر', 'متر'}
+
     def _add_to_cart(self, pid, price_id=None, preset_price=None, preset_label=None):
         p = get_product(pid)
         if not p:
@@ -455,10 +458,14 @@ class SaleForm:
         if avail <= 0:
             messagebox.showwarning('موجودی ناکافی', f'موجودی {p["name"]} به اتمام رسیده')
             return
-        max_qty = min(avail, 9999)
-        qty = persian_askinteger('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
-                                 minvalue=1, maxvalue=max_qty,
-                                 parent=self.frame.winfo_toplevel())
+        is_float = p.get('unit') in self._FLOAT_UNITS
+        max_qty = min(float(avail), 9999) if is_float else min(avail, 9999)
+        qty = persian_askfloat('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
+                               minvalue=0.1 if is_float else 1, maxvalue=max_qty,
+                               parent=self.frame.winfo_toplevel()) if is_float else \
+               persian_askinteger('مقدار', f'{p["unit"]} {p["name"]}: (موجودی: {persian_digits(avail)})',
+                                  minvalue=1, maxvalue=max_qty,
+                                  parent=self.frame.winfo_toplevel())
         if qty is None:
             return
         if preset_price is not None:
@@ -929,9 +936,7 @@ class SaleDetailView:
         status_map = {'paid': 'تسویه', 'pending': 'در انتظار',
                       'partial': 'جزئی', 'cancelled': 'لغو'}
         rev = {v: k for k, v in status_map.items()}
-        win = tk.Toplevel(self.frame)
-        win.title('تغییر وضعیت')
-        win.geometry('350x200')
+        win = make_dialog(self.frame, 'تغییر وضعیت', 350, 200)
         win.configure(bg=Colors.card)
         win.resizable(False, False)
 
@@ -957,6 +962,10 @@ class SaleDetailView:
             if new_status and new_status != sale['status']:
                 from desktop.db import execute as db_exe
                 db_exe("UPDATE store_sale SET status=? WHERE id=?", [new_status, sale_id])
+                if new_status == 'paid':
+                    inst = fetchone("SELECT id, total_count FROM store_installment WHERE sale_id=? AND status='active'", [sale_id])
+                    if inst:
+                        db_exe("UPDATE store_installment SET paid_count=?, status='paid' WHERE id=?", [inst['total_count'], inst['id']])
             win.destroy()
             for w in self.frame.winfo_children():
                 w.destroy()

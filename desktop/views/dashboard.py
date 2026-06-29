@@ -174,7 +174,7 @@ class DashboardView:
              '', '#f59e0b', '#fffbeb'),
             ('⚠️', 'بدهکاران', f'{persian_digits(debtors_count)} نفر',
              '', '#ef4444', '#fef2f2'),
-            ('⏰', 'پرداخت‌های گذشته', f'{persian_digits(overdue_count)} فاکتور',
+            ('⏰', 'تاخیر در پرداختها', f'{persian_digits(overdue_count)} فاکتور',
              '', '#dc2626' if overdue_count else '#10b981',
              '#fef2f2' if overdue_count else '#ecfdf5'),
         ]
@@ -240,7 +240,7 @@ class DashboardView:
         lower.pack(fill='both', expand=True, pady=(12, 0))
 
         overdue_frame = self._make_section(
-            lower, '⏰  پرداخت‌های گذشته',
+            lower, '⏰  تاخیر در پرداخت ها',
             Colors.danger if overdue_count else Colors.success
         )
 

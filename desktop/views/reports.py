@@ -7,7 +7,7 @@ from desktop.db import (
     installment_report, low_stock_products
 )
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import format_number, format_date
+from desktop.utils import format_number, format_date, make_dialog
 from desktop.views.sales import SaleDetailView
 from datetime import date, timedelta, datetime
 
@@ -342,22 +342,63 @@ class ReportsView:
 
     def _installments_report(self):
         tc = self._table_card()
-        tk.Label(tc, text='📋  وضعیت اقساط',
-                 font=get_bold_font(14), bg=Colors.card,
-                 fg=Colors.text_primary).pack(anchor='e', padx=24, pady=(16, 0))
 
-        installments = installment_report()
-        active = [i for i in installments if i['status'] == 'active']
-        paid_inst = [i for i in installments if i['status'] == 'paid']
+        filter_card = tk.Frame(tc, bg=Colors.card,
+                               highlightbackground=Colors.border, highlightthickness=1,
+                               padx=12, pady=8)
+        filter_card.pack(fill='x', padx=0)
+
+        tk.Label(filter_card, text='مشتری:', font=get_font(9),
+                 bg=Colors.card, fg=Colors.text_secondary).pack(side='right', padx=(4, 0))
+        customer_var = tk.StringVar(value='')
+        all_customer_names = []
+        customer_cb = ttk.Combobox(filter_card, textvariable=customer_var,
+                                    state='normal', font=get_font(9), width=16)
+        customer_cb.pack(side='right', padx=4)
+
+        def _filter_customers(*_):
+            q = customer_var.get().strip()
+            if q:
+                customer_cb['values'] = [c for c in all_customer_names if q in c]
+            else:
+                customer_cb['values'] = all_customer_names
+            customer_cb.event_generate('<Down>')
+
+        customer_cb.bind('<KeyRelease>', _filter_customers)
+
+        tk.Label(filter_card, text='فاکتور #:', font=get_font(9),
+                 bg=Colors.card, fg=Colors.text_secondary).pack(side='right', padx=(4, 0))
+        sale_var = tk.StringVar()
+        sale_cb = ttk.Combobox(filter_card, textvariable=sale_var,
+                                state='normal', font=get_font(9), width=10)
+        sale_cb.pack(side='right', padx=4)
 
         info_frame = tk.Frame(tc, bg=Colors.card)
         info_frame.pack(fill='x', padx=24, pady=(12, 16))
 
-        self._make_cards(info_frame, [
-            ('کل اقساط', str(len(installments)), Colors.blue),
-            ('قسط‌های فعال', str(len(active)), Colors.warning),
-            ('تسویه شده', str(len(paid_inst)), Colors.success),
-        ])
+        cols = ('sale_id', 'next_due', 'status', 'progress', 'remaining', 'paid', 'per_term', 'total',
+                'phone', 'customer')
+        tree = ttk.Treeview(tc, columns=cols, show='headings', height=15)
+        tree.heading('sale_id', text='#', anchor='center')
+        tree.heading('next_due', text='سررسید بعدی', anchor='center')
+        tree.heading('status', text='وضعیت', anchor='center')
+        tree.heading('progress', text='پیشرفت', anchor='center')
+        tree.heading('remaining', text='باقی‌مانده', anchor='center')
+        tree.heading('paid', text='پرداخت شده', anchor='center')
+        tree.heading('per_term', text='مبلغ هر قسط', anchor='center')
+        tree.heading('total', text='مبلغ کل', anchor='center')
+        tree.heading('phone', text='تلفن', anchor='center')
+        tree.heading('customer', text='مشتری', anchor='e')
+        tree.column('sale_id', width=80, anchor='center')
+        tree.column('next_due', width=110, anchor='center')
+        tree.column('status', width=70, anchor='center')
+        tree.column('progress', width=70, anchor='center')
+        tree.column('remaining', width=110, anchor='center')
+        tree.column('paid', width=110, anchor='center')
+        tree.column('per_term', width=90, anchor='center')
+        tree.column('total', width=110, anchor='center')
+        tree.column('phone', width=100, anchor='center')
+        tree.column('customer', width=200, anchor='e')
 
         def _next_due(start_date_str, last_payment_date_str, due_days, status, total_count, paid_count):
             if status != 'active':
@@ -373,29 +414,75 @@ class ReportsView:
             except Exception:
                 return '—'
 
-        cols = ('sale_id', 'next_due', 'status', 'progress', 'remaining', 'paid', 'per_term', 'total',
-                'phone', 'customer')
-        tree = ttk.Treeview(tc, columns=cols, show='headings', height=15)
-        tree.heading('sale_id', text='', anchor='center')
-        tree.heading('next_due', text='سررسید بعدی', anchor='center')
-        tree.heading('status', text='وضعیت', anchor='center')
-        tree.heading('progress', text='پیشرفت', anchor='center')
-        tree.heading('remaining', text='باقی‌مانده', anchor='center')
-        tree.heading('paid', text='پرداخت شده', anchor='center')
-        tree.heading('per_term', text='مبلغ هر قسط', anchor='center')
-        tree.heading('total', text='مبلغ کل', anchor='center')
-        tree.heading('phone', text='تلفن', anchor='center')
-        tree.heading('customer', text='مشتری', anchor='e')
-        tree.column('sale_id', width=0, stretch=False)
-        tree.column('next_due', width=110, anchor='center')
-        tree.column('status', width=70, anchor='center')
-        tree.column('progress', width=70, anchor='center')
-        tree.column('remaining', width=110, anchor='center')
-        tree.column('paid', width=110, anchor='center')
-        tree.column('per_term', width=90, anchor='center')
-        tree.column('total', width=110, anchor='center')
-        tree.column('phone', width=100, anchor='center')
-        tree.column('customer', width=200, anchor='e')
+        def _build_cname(i):
+            return f"{i['first_name'] or ''} {i['last_name'] or ''}".strip()
+
+        def load_data(*_):
+            for item in tree.get_children():
+                tree.delete(item)
+            for w in info_frame.winfo_children():
+                w.destroy()
+            installments = installment_report()
+            cq = customer_var.get().strip()
+            sq = sale_var.get().strip()
+            cq = cq if cq in all_customer_names else ''
+            sale_ids = set()
+            for i in installments:
+                cname = _build_cname(i)
+                if cname not in all_customer_names:
+                    all_customer_names.append(cname)
+                if cq and cq != cname:
+                    continue
+                sale_ids.add(i['sale_id'])
+            all_customer_names.sort()
+            customer_cb['values'] = [''] + all_customer_names
+            sale_cb['values'] = [''] + sorted(sale_ids)
+            if sq and sq not in sale_cb['values']:
+                sq = ''
+                sale_var.set('')
+            active = [x for x in installments if x['status'] == 'active']
+            paid_inst = [x for x in installments if x['status'] == 'paid']
+            total_remaining = 0
+            self._make_cards(info_frame, [
+                ('کل اقساط', str(len(installments)), Colors.blue),
+                ('قسط‌های فعال', str(len(active)), Colors.warning),
+                ('تسویه شده', str(len(paid_inst)), Colors.success),
+                ('باقی‌مانده', '—', Colors.danger),
+            ])
+            remaining_label = info_frame.winfo_children()[-1].winfo_children()[-1]
+            for i in installments:
+                cname = _build_cname(i)
+                if cq and cq != cname:
+                    continue
+                if sq:
+                    try:
+                        if int(sq) != i['sale_id']:
+                            continue
+                    except ValueError:
+                        pass
+                remaining = max(0, (i['total_amount'] or 0) - (i['amount_paid'] or 0))
+                total_remaining += remaining
+                progress = f"{i['paid_count']}/{i['total_count']}"
+                status_text = 'فعال' if i['status'] == 'active' else 'تسویه'
+                next_due = _next_due(i['start_date'], i.get('last_payment_date'), i['due_day'], i['status'], i['total_count'], i['paid_count'])
+                tree.insert('', 'end', values=(
+                    i['sale_id'],
+                    next_due,
+                    status_text,
+                    progress,
+                    format_number(remaining),
+                    format_number(i['amount_paid']),
+                    format_number(i['amount_per_term']),
+                    format_number(i['total_amount']),
+                    i.get('phone') or '—',
+                    _build_cname(i),
+                ))
+            remaining_label.config(text=format_number(total_remaining))
+
+            if not installments:
+                tk.Label(tc, text='هیچ قسطی ثبت نشده است',
+                         font=get_font(9), bg=Colors.card,
+                         fg=Colors.text_muted).pack(pady=20)
 
         def _open_sale(event):
             item = tree.identify_row(event.y)
@@ -403,9 +490,7 @@ class ReportsView:
                 return
             values = tree.item(item, 'values')
             if values:
-                win = tk.Toplevel(self.frame)
-                win.title(f'فروش #{values[0]}')
-                win.geometry('900x680')
+                win = make_dialog(self.frame, f'فروش #{values[0]}', 900, 680)
                 win.configure(bg=Colors.bg)
                 SaleDetailView(win, int(values[0]), self.app)
 
@@ -416,28 +501,9 @@ class ReportsView:
         tree.pack(side='right', fill='both', expand=True)
         scrollbar.pack(side='left', fill='y')
 
-        for i in installments:
-            remaining = max(0, (i['total_amount'] or 0) - (i['amount_paid'] or 0))
-            progress = f"{i['paid_count']}/{i['total_count']}"
-            status_text = 'فعال' if i['status'] == 'active' else 'تسویه'
-            next_due = _next_due(i['start_date'], i.get('last_payment_date'), i['due_day'], i['status'], i['total_count'], i['paid_count'])
-            tree.insert('', 'end', values=(
-                i['sale_id'],
-                next_due,
-                status_text,
-                progress,
-                format_number(remaining),
-                format_number(i['amount_paid']),
-                format_number(i['amount_per_term']),
-                format_number(i['total_amount']),
-                i.get('phone') or '—',
-                f"{i['first_name']} {i['last_name']}",
-            ))
-
-        if not installments:
-            tk.Label(tc, text='هیچ قسطی ثبت نشده است',
-                     font=get_font(9), bg=Colors.card,
-                     fg=Colors.text_muted).pack(pady=20)
+        customer_var.trace('w', load_data)
+        sale_var.trace('w', load_data)
+        load_data()
 
     def _stock_report(self):
         card = self._report_card('📦  گزارش موجودی انبار')

@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from desktop.db import get_all_products, get_product, create_product, update_product, delete_product, get_product_types, get_product_type, create_product_type, update_product_type, delete_product_type, get_product_prices, create_product_price, update_product_price, delete_product_price, create_supply_entry, get_supply_log
 from desktop.theme import Colors, get_font, get_bold_font
-from desktop.utils import persian_digits, format_number, format_date, add_number_comma_formatting, clean_number
+from desktop.utils import persian_digits, format_number, format_date, add_number_comma_formatting, clean_number, make_dialog
 
 
 def _make_button(parent, text, bg, active_bg, command):
@@ -13,9 +13,7 @@ def _make_button(parent, text, bg, active_bg, command):
 
 
 def _make_form_dialog(parent, title, fields, obj=None, on_save=None, combobox_data=None, on_delete=None):
-    win = tk.Toplevel(parent)
-    win.title(title)
-    win.geometry('520x480')
+    win = make_dialog(parent, title, 520, 480)
     win.configure(bg=Colors.card)
     win.resizable(False, False)
 
@@ -280,7 +278,7 @@ class ProductsView:
     def _add(self):
         types = get_product_types()
         type_items = [f'{t["id"]}: {t["name"]}' for t in types]
-        unit_items = ['', 'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
+        unit_items = ['', 'کیسه',  'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
         fields = [('نام محصول', 'name', 'text'),
                   ('نوع محصول', 'product_type_id', 'combobox'),
                   ('واحد', 'unit', 'combobox'),
@@ -308,7 +306,7 @@ class ProductsView:
             return
         types = get_product_types()
         type_items = [f'{t["id"]}: {t["name"]}' for t in types]
-        unit_items = ['', 'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
+        unit_items = ['', 'کیسه', 'عدد', 'کیلوگرم', 'گرم', 'لیتر', 'متر', 'بسته', 'کارتن', 'جعبه', 'بطری']
         fields = [('نام محصول', 'name', 'text'),
                   ('نوع محصول', 'product_type_id', 'combobox'),
                   ('واحد', 'unit', 'combobox'),
@@ -341,9 +339,7 @@ class ProductsView:
         if not products:
             messagebox.showinfo('', 'محصولی وجود ندارد')
             return
-        win = tk.Toplevel(self.frame)
-        win.title('مدیریت قیمت‌های محصول')
-        win.geometry('700x600')
+        win = make_dialog(self.frame, 'مدیریت قیمت‌های محصول', 700, 600)
         win.configure(bg=Colors.bg)
 
         main = tk.Frame(win, bg=Colors.bg, padx=20, pady=16)
@@ -412,10 +408,7 @@ class ProductsView:
                          lambda: _show_history(pid, tree)).pack(side='right', padx=4)
 
         def _price_form_dialog(title, fields_data, on_save_cb):
-            fwin = tk.Toplevel(win)
-            fwin.title(title)
-            height = 320 + len(fields_data) * 40
-            fwin.geometry(f'400x{height}')
+            fwin = make_dialog(win, title, 400, 320 + len(fields_data) * 40)
             fwin.configure(bg=Colors.card)
             fwin.resizable(False, False)
 
@@ -535,9 +528,7 @@ class ProductsView:
             if not sp:
                 return
             price_id, label, amt, stock = sp
-            fwin = tk.Toplevel(win)
-            fwin.title('تامین کالا')
-            fwin.geometry('380x300')
+            fwin = make_dialog(win, 'تامین کالا', 380, 300)
             fwin.configure(bg=Colors.card)
             fwin.resizable(False, False)
 
@@ -606,9 +597,7 @@ class ProductsView:
                 return
             price_id, label, amt, stock = sp
             log = get_supply_log(price_id)
-            hwin = tk.Toplevel(win)
-            hwin.title(f'تاریخچه تامین - {label}')
-            hwin.geometry('750x420')
+            hwin = make_dialog(win, f'تاریخچه تامین - {label}', 750, 420)
             hwin.configure(bg=Colors.bg)
 
             main = tk.Frame(hwin, bg=Colors.bg, padx=20, pady=16)
