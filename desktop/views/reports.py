@@ -344,6 +344,31 @@ class ReportsView:
     def _installments_report(self):
         tc = self._table_card()
 
+        self._inst_tab = 'active'
+
+        tab_frame = tk.Frame(tc, bg=Colors.card,
+                             highlightbackground=Colors.border, highlightthickness=1,
+                             padx=12, pady=8)
+        tab_frame.pack(fill='x', padx=0)
+
+        def _switch_inst_tab(tab):
+            self._inst_tab = tab
+            for k, btn in inst_tab_btns.items():
+                btn.configure(bg=Colors.accent if k == tab else Colors.card,
+                              fg='#ffffff' if k == tab else Colors.text_secondary)
+            load_data()
+
+        inst_tab_btns = {}
+        for key, label in [('active', 'فعال'), ('paid', 'تسویه شده')]:
+            btn = tk.Button(tab_frame, text=label, font=get_font(9),
+                            bg=Colors.accent if key == 'active' else Colors.card,
+                            fg='#ffffff' if key == 'active' else Colors.text_secondary,
+                            bd=1, relief='solid',
+                            cursor='hand2', padx=20, pady=4,
+                            command=lambda k=key: _switch_inst_tab(k))
+            btn.pack(side='right', padx=(4, 0))
+            inst_tab_btns[key] = btn
+
         filter_card = tk.Frame(tc, bg=Colors.card,
                                highlightbackground=Colors.border, highlightthickness=1,
                                padx=12, pady=8)
@@ -444,6 +469,7 @@ class ReportsView:
             active = [x for x in installments if x['status'] == 'active']
             paid_inst = [x for x in installments if x['status'] == 'paid']
             total_remaining = 0
+            filtered = [x for x in installments if x['status'] == ('active' if self._inst_tab == 'active' else 'paid')]
             self._make_cards(info_frame, [
                 ('کل اقساط', str(len(installments)), Colors.blue),
                 ('قسط‌های فعال', str(len(active)), Colors.warning),
@@ -451,7 +477,7 @@ class ReportsView:
                 ('باقی‌مانده', '—', Colors.danger),
             ])
             remaining_label = info_frame.winfo_children()[-1].winfo_children()[-1]
-            for i in installments:
+            for i in filtered:
                 cname = _build_cname(i)
                 if cq and cq != cname:
                     continue
@@ -480,8 +506,8 @@ class ReportsView:
                 ))
             remaining_label.config(text=format_number(total_remaining))
 
-            if not installments:
-                tk.Label(tc, text='هیچ قسطی ثبت نشده است',
+            if not filtered:
+                tk.Label(tc, text='هیچ قسطی با این وضعیت یافت نشد',
                          font=get_font(9), bg=Colors.card,
                          fg=Colors.text_muted).pack(pady=20)
 

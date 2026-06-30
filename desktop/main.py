@@ -2,6 +2,7 @@
 import os
 import sys
 import tkinter as tk
+from tkinter import messagebox
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -33,6 +34,12 @@ def main():
         pass
 
     app = App(root)
+
+    def on_close():
+        if messagebox.askyesno('خروج', 'آیا از خروج مطمئن هستید؟'):
+            root.destroy()
+
+    root.protocol('WM_DELETE_WINDOW', on_close)
     root.mainloop()
 
 

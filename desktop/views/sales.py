@@ -674,6 +674,9 @@ class SaleForm:
     def _submit(self):
         total = sum(item['subtotal'] for item in self.cart)
         dp = int(clean_number(self.dp_var.get() or '0'))
+        if dp > total:
+            messagebox.showwarning('خطا', 'پیش‌پرداخت نمی‌تواند از مبلغ کل بیشتر باشد')
+            return
         notes = self.notes_text.get('1.0', 'end-1c').strip()
 
         for item in self.cart:
